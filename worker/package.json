@@ -1,0 +1,15 @@
+{
+  "name": "iptv-db-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "node-cron": "^3.0.3",
+    "pocketbase": "^0.25.2"
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=IPTV DB - Sync Worker
+After=network.target iptv-pb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/iptv/worker
+ExecStart=/usr/bin/node /opt/iptv/worker/index.js
+Restart=on-failure
+RestartSec=5
+Environment=POCKETBASE_URL=http://127.0.0.1:8090
+
+[Install]
+WantedBy=multi-user.target
