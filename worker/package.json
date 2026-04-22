@@ -10,6 +10,6 @@
   "dependencies": {
     "cheerio": "^1.1.2",
     "node-cron": "^3.0.3",
-    "pocketbase": "^0.25.2"
+    "pocketbase": "^0.26.8"
   }
 }

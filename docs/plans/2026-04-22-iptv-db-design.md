@@ -216,6 +216,16 @@ A self-hosted IPTV catalog application with a web SPA frontend. The system scrap
 - Failed sources marked `error`, skipped until re-enabled
 - Partial syncs preserved (idempotent upsert)
 
+## PocketBase 0.36.8 API Format Notes
+
+The JS migration format (`pb_migrations/*.js`) does NOT properly create schema fields in PB 0.36.8.
+Instead, collections must be created via the Admin API using `setup.js`.
+
+**Field format differences from older versions:**
+- Select fields: `{ name: 'x', type: 'select', values: ['a', 'b'] }` (values at TOP LEVEL, not in `options`)
+- Relation fields: `{ name: 'x', type: 'relation', collectionId: 'pbc_xxx' }` (collectionId at TOP LEVEL, not in `options`)
+- The `pb.collections.create()` SDK method crashes on response parsing — use raw `fetch` to `/api/collections`
+
 ## Deployment (Direct on VPS)
 
 ### Prerequisites

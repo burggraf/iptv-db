@@ -4,226 +4,107 @@ Self-hosted IPTV catalog application. Scrapes blog pages for Xtream accounts and
 
 ## Architecture
 
-- **Backend**: PocketBase (single Go binary, embedded SQLite)
+- **Backend**: PocketBase 0.36.8 (single Go binary, embedded SQLite)
 - **Worker**: Node.js (scraping, Xtream API sync, job queue)
 - **Frontend**: Vite + React + TypeScript SPA (served by PocketBase)
 
 ## Quick Start (Development)
 
-### Prerequisites
-
-- Node.js 22+ LTS
-- Go (optional, for building PocketBase from source)
-
-### 1. Set up PocketBase
+### 1. Start PocketBase
 
 ```bash
-# Download PocketBase (latest release)
+# PocketBase is already installed on this system
 cd /path/to/iptv-db
-mkdir -p pocketbase
-cd pocketbase
-wget https://github.com/pocketbase/pocketbase/releases/download/v0.25.8/pocketbase_0.25.8_linux_amd64.zip
-unzip pocketbase_*.zip
-cd ..
+pocketbase superuser upsert admin@iptv.local admin12345678
+pocketbase serve --http=127.0.0.1:8090 &
 ```
 
-For macOS:
-```bash
-wget https://github.com/pocketbase/pocketbase/releases/download/v0.25.8/pocketbase_0.25.8_darwin_amd64.zip
-unzip pocketbase_*.zip
-# or for Apple Silicon:
-wget https://github.com/pocketbase/pocketbase/releases/download/v0.25.8/pocketbase_0.25.8_darwin_arm64.zip
-```
-
-### 2. Run PocketBase (applies migrations automatically)
+### 2. Create Collections
 
 ```bash
-./pocketbase/pocketbase serve --http=127.0.0.1:8090
+cd worker && node setup.js
 ```
 
-This starts PocketBase and applies all migrations from `pb_migrations/`.
+This creates all 7 collections with proper fields and indexes via the Admin API.
 
-### 3. Set up the Worker
-
-```bash
-cd worker
-cp ../.env.example .env
-# Edit .env with your PocketBase admin credentials
-npm install
-npm run dev
-```
-
-### 4. Set up the Frontend
+### 3. Build Frontend
 
 ```bash
 cd frontend
-npm install
-npm run dev
-```
-
-The frontend dev server runs on `http://localhost:5173` and proxies `/api` to PocketBase.
-
-### 5. Create an Admin User
-
-Open `http://127.0.0.1:8090/_/` in your browser and create an admin account. Update the worker's `.env` with these credentials.
-
-### 6. Create a User
-
-In the PocketBase admin UI, go to the `users` collection and create a user account. This is the login for the SPA.
-
-## Production Deployment (Ubuntu 24.04)
-
-### 1. Install Dependencies
-
-```bash
-sudo apt update
-sudo apt install -y nodejs npm nginx certbot python3-certbot-nginx
-```
-
-### 2. Download PocketBase
-
-```bash
-sudo mkdir -p /opt/iptv
-cd /opt/iptv
-wget https://github.com/pocketbase/pocketbase/releases/download/v0.25.8/pocketbase_0.25.8_linux_amd64.zip
-unzip pocketbase_*.zip
-rm pocketbase_*.zip
-```
-
-### 3. Copy Application Files
-
-```bash
-# Copy migrations, worker, and frontend source to /opt/iptv
-# (rsync from your dev machine)
-sudo rsync -av pb_migrations/ /opt/iptv/pb_migrations/
-sudo rsync -av worker/ /opt/iptv/worker/
-sudo rsync -av frontend/ /opt/iptv/frontend/
-```
-
-### 4. Install Dependencies
-
-```bash
-cd /opt/iptv/worker
-npm install --production
-
-cd /opt/iptv/frontend
 npm ci
 npm run build
-sudo cp -r dist/* /opt/iptv/pb_public/
+cp -r dist/* ../pb_public/
 ```
 
-### 5. Set up systemd Services
+### 4. Start Worker
 
 ```bash
-# Copy service files
-sudo cp deploy/iptv-pb.service /etc/systemd/system/
-sudo cp deploy/iptv-worker.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now iptv-pb
-sudo systemctl enable --now iptv-worker
+cd worker
+npm ci
+node index.js
 ```
 
-### 6. Configure nginx
+### 5. Create a User
 
-```bash
-sudo cp deploy/nginx-iptv.conf /etc/nginx/sites-available/iptv
-sudo ln -s /etc/nginx/sites-available/iptv /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
+Open `http://127.0.0.1:8090/_/` in your browser, go to the `users` collection, and create a user account. This is the login for the SPA.
 
-### 7. Set up HTTPS
+### 6. Access the App
 
-```bash
-sudo certbot --nginx -d iptv.yourdomain.com
-```
+Open `http://127.0.0.1:8090/` in your browser and log in with the user account you created.
+
+## Database Schema
+
+### Collections
+
+| Collection | Fields | Indexes | Description |
+|---|---|---|---|
+| `sources` | 13 | 3 | Xtream accounts and M3U sources |
+| `categories` | 4 | 3 | Live/VOD/Series categories per source |
+| `channels` | 10 | 5 | Live TV channels |
+| `movies` | 17 | 5 | VOD movies |
+| `series` | 13 | 5 | TV series |
+| `series_episodes` | 9 | 3 | Individual episodes |
+| `sync_jobs` | 7 | 2 | Sync job tracking |
+
+### Index Strategy
+
+All content tables (channels, movies, series) have:
+- **Unique index** on `(stream_id/source_id)` to prevent duplicates
+- **Browse index** on `(source_id, category_id, available)` for primary queries
+- **Source index** for source detail pages
+- **Category index** for global category browsing
+- **Name index** for search
 
 ## Operations
 
 ### Backup
 
 ```bash
-# Stop PocketBase first for a clean backup
-sudo systemctl stop iptv-pb
-tar czf iptv-backup-$(date +%Y%m%d).tar.gz /opt/iptv/pb_data/
-sudo systemctl start iptv-pb
+tar czf iptv-backup-$(date +%Y%m%d).tar.gz pb_data/
 ```
 
 ### Restore
 
 ```bash
-sudo systemctl stop iptv-pb
-tar xzf iptv-backup-YYYYMMDD.tar.gz -C /
-sudo systemctl start iptv-pb
+tar xzf iptv-backup-YYYYMMDD.tar.gz
 ```
 
-### Update
-
-```bash
-# Update PocketBase binary
-cd /opt/iptv
-wget https://github.com/pocketbase/pocketbase/releases/download/v0.26.x/pocketbase_0.26.x_linux_amd64.zip
-unzip -o pocketbase_*.zip
-rm pocketbase_*.zip
-
-# Update worker and frontend
-sudo rsync -av worker/ /opt/iptv/worker/
-sudo rsync -av frontend/ /opt/iptv/frontend/
-
-cd /opt/iptv/worker && npm install --production
-cd /opt/iptv/frontend && npm ci && npm run build
-sudo cp -r dist/* /opt/iptv/pb_public/
-
-sudo systemctl restart iptv-pb iptv-worker
-```
-
-## Project Structure
-
-```
-├── pb_migrations/          # PocketBase collection schema migrations
-├── frontend/               # Vite + React SPA
-│   ├── src/
-│   │   ├── components/     # UI components
-│   │   ├── routes/         # Page components
-│   │   ├── hooks/          # Auth hook
-│   │   ├── lib/            # PocketBase client, utils
-│   │   └── types/          # TypeScript types
-│   └── ...
-├── worker/                 # Node.js scraper + sync engine
-│   ├── index.js            # Entry point + HTTP API
-│   ├── scraper.js          # Blog page scraping (Cheerio)
-│   ├── xtream.js           # Xtream API client
-│   ├── m3u-parser.js       # M3U playlist parser
-│   ├── sync-engine.js      # Job queue + worker pool
-│   └── sync-job.js         # Single source sync logic
-├── deploy/                 # systemd + nginx configs
-├── docs/
-│   └── plans/
-│       └── 2026-04-22-iptv-db-design.md
-├── .env.example
-└── README.md
-```
-
-## API Endpoints (Worker)
+### Sync API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/scrape` | Scrape a blog URL for sources |
-| POST | `/api/sync` | Queue a source for sync |
-| GET | `/api/status` | Queue and worker status |
-
-### Example: Scrape
+| POST | `/worker/api/scrape` | Scrape a blog URL for sources |
+| POST | `/worker/api/sync` | Queue a source for sync |
+| GET | `/worker/api/status` | Queue and worker status |
 
 ```bash
+# Scrape a blog page
 curl -X POST http://localhost:3100/api/scrape \
   -H 'Content-Type: application/json' \
-  -d '{"url": "https://www.iptvregion.eu.org/2026/04/..."}'
-```
+  -d '{"url": "https://www.iptvregion.eu.org/..."}'
 
-### Example: Sync
-
-```bash
+# Sync a specific source
 curl -X POST http://localhost:3100/api/sync \
   -H 'Content-Type: application/json' \
-  -d '{"source_id": "SOURCE_RECORD_ID"}'
+  -d '{"source_id": "SOURCE_ID"}'
 ```
