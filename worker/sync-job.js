@@ -244,7 +244,7 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
       stream_id: streamId,
       category_id: pbCategoryId,
       name: stream.name || 'Unknown',
-      logo: stream.stream_icon || stream.logo || '',
+      logo: (stream.stream_icon || stream.logo || '').slice(0, 2000),
       epg_id: stream.epg_channel_id || '',
       tvg_id: stream.tv_archive_duration !== undefined ? String(stream.tv_archive_duration) : '',
       tvg_country: stream.country || '',
