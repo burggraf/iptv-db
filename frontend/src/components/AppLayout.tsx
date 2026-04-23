@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings, Trash2, Globe, RefreshCw } from 'lucide-react';
+import { Settings, Trash2, Globe, RefreshCw, X } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import type { SyncJob } from '../types/database';
 
@@ -73,6 +73,20 @@ export default function AppLayout() {
     } catch (err) {
       console.error('Sync failed:', err);
       setSourceSyncing(false);
+    }
+  };
+
+  const handleCancelSync = async () => {
+    if (!currentSourceId) return;
+    setSettingsOpen(false);
+    try {
+      await fetch(`/worker/api/sync/${currentSourceId}/cancel`, {
+        method: 'POST',
+      });
+      setSourceSyncing(false);
+      setSourceSyncJob(null);
+    } catch (err) {
+      console.error('Cancel sync failed:', err);
     }
   };
 
@@ -206,12 +220,23 @@ export default function AppLayout() {
                 <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
                   <div className="py-1">
                     {currentSourceId ? (
-                      <button
-                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
-                        onClick={handleSyncSource}
-                      >
-                        <RefreshCw className="h-4 w-4" /> Sync
-                      </button>
+                      <>
+                        {sourceSyncing ? (
+                          <button
+                            className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                            onClick={handleCancelSync}
+                          >
+                            <X className="h-4 w-4" /> Cancel Sync
+                          </button>
+                        ) : (
+                          <button
+                            className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                            onClick={handleSyncSource}
+                          >
+                            <RefreshCw className="h-4 w-4" /> Sync
+                          </button>
+                        )}
+                      </>
                     ) : (
                       <>
                         <button
