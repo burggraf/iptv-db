@@ -58,12 +58,12 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
   onProgress('Fetching categories...', 10);
   const catMap = {};
 
-  checkCancelled(isCancelled);
-  await syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress, isCancelled);
-  checkCancelled(isCancelled);
-  await syncCategories(pb, sourceId, 'vod', xtream, catMap, onProgress, isCancelled);
-  checkCancelled(isCancelled);
-  await syncCategories(pb, sourceId, 'series', xtream, catMap, onProgress, isCancelled);
+  // Parallelize — live/vod/series category fetches are independent
+  await Promise.all([
+    syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress, isCancelled),
+    syncCategories(pb, sourceId, 'vod', xtream, catMap, onProgress, isCancelled),
+    syncCategories(pb, sourceId, 'series', xtream, catMap, onProgress, isCancelled),
+  ]);
 
   // --- Live channels (fully synced) ---
   onProgress('Fetching live channels...', 15);
@@ -214,21 +214,15 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
     return 0;
   }
 
-  checkCancelled(isCancelled);
-  const existing = await pb.collection('channels').getFullList({
-    filter: `source_id="${sourceId}"`,
-  });
-  const existingMap = new Map();
-  for (const ch of existing) {
-    existingMap.set(ch.stream_id, ch);
+  const total = streams.length;
+  if (total === 0) {
+    console.log(`[sync-job] Live channels: 0 synced`);
+    return 0;
   }
 
-  const streamIds = new Set();
-  let count = 0;
-  const total = streams.length;
-
-  const batchSize = 100;
-  const batch = [];
+  // Build channel payloads for bulk upload
+  const channels = [];
+  const batchSize = 1000;
 
   for (const stream of streams) {
     const streamId = stream.stream_id || stream.stream_num;
@@ -239,69 +233,51 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
     const pbCategoryId = catMap[catKey] || await ensureCategory(pb, sourceId, 'live', categoryId, catMap);
     if (!pbCategoryId) continue;
 
-    streamIds.add(streamId);
-
-    const data = {
-      source_id: sourceId,
-      category_id: pbCategoryId,
+    channels.push({
       stream_id: streamId,
+      category_id: pbCategoryId,
       name: stream.name || 'Unknown',
       logo: stream.stream_icon || stream.logo || '',
       epg_id: stream.epg_channel_id || '',
       tvg_id: stream.tv_archive_duration !== undefined ? String(stream.tv_archive_duration) : '',
       tvg_country: stream.country || '',
       added: stream.added || '',
-      available: true,
-    };
+    });
 
-    batch.push(data);
-
-    if (batch.length >= batchSize) {
-      await flushChannelBatch(pb, existingMap, batch, streamIds);
-      count += batch.length;
-      batch.length = 0;
+    if (channels.length >= batchSize) {
+      await flushChannelBatchBulk(pb, sourceId, channels);
+      onProgress(`Syncing channels ${channels.length}/${total}...`, 15 + Math.floor((channels.length / total) * 30));
       checkCancelled(isCancelled);
-      onProgress(`Syncing channels ${count}/${total}...`, 15 + Math.floor((count / total) * 30));
+      channels.length = 0;
     }
   }
 
-  if (batch.length > 0) {
-    await flushChannelBatch(pb, existingMap, batch, streamIds);
-    count += batch.length;
+  if (channels.length > 0) {
+    await flushChannelBatchBulk(pb, sourceId, channels);
   }
 
-  // Mark channels no longer in the source as unavailable
-  for (const ch of existing) {
-    if (!streamIds.has(ch.stream_id) && ch.available) {
-      try {
-        await pb.collection('channels').update(ch.id, { available: false });
-      } catch { /* skip */ }
-    }
-  }
-
-  console.log(`[sync-job] Live channels: ${count} synced`);
-  return count;
+  console.log(`[sync-job] Live channels: ${total} synced (bulk)`);
+  return total;
 }
 
 /**
- * Flush a batch of channel upserts.
+ * Flush a batch of channels via PocketBase bulk endpoint.
+ * Single HTTP call replaces N individual create/update requests.
+ * Server-side transaction handles upsert + cleanup atomically.
  */
-async function flushChannelBatch(pb, existingMap, batch, streamIds) {
-  const promises = batch.map(async (data) => {
-    const existing = existingMap.get(data.stream_id);
-    try {
-      if (existing) {
-        streamIds.add(data.stream_id);
-        await pb.collection('channels').update(existing.id, { ...data, available: true });
-      } else {
-        await pb.collection('channels').create(data);
-        streamIds.add(data.stream_id);
-      }
-    } catch (err) {
-      console.warn(`[sync-job] Channel upsert failed: stream_id=${data.stream_id} ${err.message}`);
-    }
+async function flushChannelBatchBulk(pb, sourceId, channels) {
+  const baseUrl = pb.baseUrl || 'http://localhost:8090';
+  const res = await fetch(`${baseUrl}/api/batch-channels`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_id: sourceId, channels }),
   });
-  await Promise.allSettled(promises);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Bulk channel sync failed (${res.status}): ${text}`);
+  }
+  const result = await res.json();
+  console.log(`[sync-job] Bulk upsert: ${result.created} created, ${result.updated} updated, ${result.deleted} deleted`);
 }
 
 /**
