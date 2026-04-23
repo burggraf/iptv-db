@@ -77,18 +77,14 @@ export default function AppLayout() {
   };
 
   const handleCancelSync = async () => {
-    console.log('[cancel] clicked, sourceId:', currentSourceId);
-    if (!currentSourceId) { console.log('[cancel] no sourceId'); return; }
+    if (!currentSourceId) return;
     setSettingsOpen(false);
     setSourceSyncing(false);
     setSourceSyncJob(null);
     try {
-      const url = `/worker/api/sync/${currentSourceId}/cancel`;
-      console.log('[cancel] fetching:', url);
-      const res = await fetch(url, { method: 'POST' });
-      console.log('[cancel] response:', res.status, res.ok);
+      await fetch(`/worker/api/sync/${currentSourceId}/cancel`, { method: 'POST' });
     } catch (err) {
-      console.error('[cancel] fetch error:', err);
+      console.error('Cancel sync failed:', err);
     }
   };
 
