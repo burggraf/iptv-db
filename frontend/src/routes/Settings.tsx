@@ -27,6 +27,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadSources();
+    loadActiveJobs();
   }, []);
 
   useEffect(() => {
@@ -112,10 +113,14 @@ export default function Settings() {
   };
 
   const handleCancel = async (sourceId: string) => {
+    setSyncing((prev) => ({ ...prev, [sourceId]: false }));
     try {
       await fetch(`${WORKER_BASE}/api/sync/${sourceId}/cancel`, {
         method: 'POST',
       });
+      // Refresh UI after cancel
+      loadSources();
+      loadActiveJobs();
     } catch (err) {
       console.error('Cancel failed:', err);
     }
@@ -123,7 +128,7 @@ export default function Settings() {
 
   const handleCancelAll = async () => {
     for (const s of sources) {
-      if (activeJobs[s.id]) {
+      if (activeJobs[s.id] || syncing[s.id]) {
         handleCancel(s.id);
       }
     }
@@ -170,11 +175,14 @@ export default function Settings() {
             <CardDescription>Manually trigger catalog sync for each source.</CardDescription>
           </div>
           <div className="flex gap-2">
-            {Object.keys(activeJobs).length > 0 && (
-              <Button variant="outline" onClick={handleCancelAll}>
-                Cancel All ({Object.keys(activeJobs).length})
-              </Button>
-            )}
+            {(() => {
+              const runningCount = sources.filter(s => activeJobs[s.id] || syncing[s.id]).length;
+              return runningCount > 0 ? (
+                <Button variant="outline" onClick={handleCancelAll}>
+                  Cancel All ({runningCount})
+                </Button>
+              ) : null;
+            })()}
             <Button onClick={handleSyncAll} disabled={sources.length === 0}>
               Sync All
             </Button>
@@ -216,7 +224,7 @@ export default function Settings() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {job ? (
+                      {job || syncing[s.id] ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -230,9 +238,8 @@ export default function Settings() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleSync(s.id)}
-                          disabled={syncing[s.id]}
                         >
-                          {syncing[s.id] ? 'Starting...' : 'Sync'}
+                          Sync
                         </Button>
                       )}
                     </TableCell>
