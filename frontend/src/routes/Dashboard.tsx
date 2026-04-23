@@ -196,7 +196,6 @@ export default function Dashboard() {
   };
 
   const handleDeleteChecked = async () => {
-    setDeleteOpen(false);
     setDeletingChecked(true);
     setDeleteError('');
     try {
@@ -212,11 +211,17 @@ export default function Dashboard() {
         throw new Error(body.message || `Server error: ${res.status}`);
       }
       setChecked(new Set());
-      // reload
+      setDeleteOpen(false);
+      setDeletingChecked(false);
       setSources(prev => prev.filter(s => !checked.has(s.id)));
+      setTotalItems(prev => prev - checked.size);
+      setCounts(prev => {
+        const next = { ...prev };
+        for (const id of checked) delete next[id];
+        return next;
+      });
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    } finally {
       setDeletingChecked(false);
     }
   };
