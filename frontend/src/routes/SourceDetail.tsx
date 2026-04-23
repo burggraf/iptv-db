@@ -12,6 +12,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
 import { formatDateTime, formatDate } from '../lib/utils';
+import ChannelDetailModal from '../components/ChannelDetailModal';
 
 export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +30,7 @@ export default function SourceDetail() {
   const [search, setSearch] = useState('');
   const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -272,18 +274,32 @@ export default function SourceDetail() {
               ))}
             </Select>
           </div>
-          <ContentTable
-            columns={['Name', 'Country', 'EPG ID', 'Added']}
-            rows={liveChannels.map((ch) => [
-              <span key={ch.id} className="flex items-center gap-2">
-                {ch.logo && <img src={ch.logo} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />}
-                {ch.name}
-              </span>,
-              ch.tvg_country || '—',
-              ch.epg_id || '—',
-              ch.added || '—',
-            ])}
-          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {['Name', 'Country', 'EPG ID', 'Added'].map((h) => <TableHead key={h}>{h}</TableHead>)}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {liveChannels.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No items found.</TableCell></TableRow>
+              ) : (
+                liveChannels.map((ch) => (
+                  <TableRow key={ch.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedChannelId(ch.id)}>
+                    <TableCell>
+                      <span className="flex items-center gap-2">
+                        {ch.logo && <img src={ch.logo} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        {ch.name}
+                      </span>
+                    </TableCell>
+                    <TableCell>{ch.tvg_country || '—'}</TableCell>
+                    <TableCell>{ch.epg_id || '—'}</TableCell>
+                    <TableCell>{ch.added || '—'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </TabsContent>
 
         <TabsContent value="vod">
@@ -338,6 +354,8 @@ export default function SourceDetail() {
       <Link to="/app/dashboard">
         <Button variant="outline">← Back to Dashboard</Button>
       </Link>
+
+      <ChannelDetailModal channelId={selectedChannelId} onClose={() => setSelectedChannelId(null)} />
     </div>
   );
 }
