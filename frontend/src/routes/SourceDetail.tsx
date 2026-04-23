@@ -77,19 +77,13 @@ export default function SourceDetail() {
     const checkJob = async () => {
       try {
         const jobs = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
-          filter: `source_id="${id}" && (status="running" || status="queued")`,
+          filter: `source_id="${id}"`,
           sort: '-created',
         });
-        const activeJob = jobs.items[0] ?? null;
-        setSyncJob(activeJob);
-        setIsSyncing(!!activeJob);
-        if (activeJob) return;
-
-        const failed = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
-          filter: `source_id="${id}" && status="failed"`,
-          sort: '-created',
-        });
-        setSyncJob(failed.items[0] ?? null);
+        const latest = jobs.items[0] ?? null;
+        const isActive = latest && (latest.status === 'running' || latest.status === 'queued');
+        setSyncJob(isActive || latest?.status === 'failed' ? latest : null);
+        setIsSyncing(!!isActive);
       } catch { /* ignore */ }
     };
     checkJob();
