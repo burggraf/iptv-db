@@ -114,9 +114,11 @@ function extractXtreamTables($) {
       // Remove trailing slash
       baseUrl = baseUrl.replace(/\/+$/, '');
 
+      const domain = baseUrl.replace(/^https?:\/\//, '').replace(/:\d+.*$/, '');
+
       sources.push({
         type: 'xtream',
-        name: `Xtream: ${server}`,
+        name: `${domain}/${username}`,
         base_url: baseUrl,
         username,
         password,
@@ -153,9 +155,11 @@ function extractM3uLinks($) {
       // Build base URL (without the get.php path)
       const baseUrl = `${url.protocol}//${url.host}`;
 
+      const domain = url.hostname;
+
       sources.push({
         type: 'm3u',
-        name: `M3U: ${url.host}`,
+        name: `${domain}/${username}`,
         base_url: baseUrl,
         username,
         password,
