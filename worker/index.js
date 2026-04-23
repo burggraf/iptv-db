@@ -14,6 +14,8 @@ const SYNC_CONCURRENCY = parseInt(process.env.SYNC_CONCURRENCY || '3', 10);
 // Connect to PocketBase as admin
 const pb = new PocketBase(PB_URL);
 await pb.admins.authWithPassword(PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD);
+// Disable auto-cancellation so concurrent batch requests don't kill each other.
+pb.autoCancellation(false);
 console.log(`[worker] Connected to PocketBase at ${PB_URL}`);
 
 // Ensure default admin user exists (for manual user creation in PB UI)
