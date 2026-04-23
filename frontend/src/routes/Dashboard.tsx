@@ -9,9 +9,6 @@ import { Input } from '../components/ui/input';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
-import {
-  Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '../components/ui/dialog';
 import { formatDateTime } from '../lib/utils';
 
 const PAGE_SIZE = 100;
@@ -32,13 +29,6 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-
-  // Settings dropdown state
-
-  // Delete all sources confirmation
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState('');
 
   // Load stats
   useEffect(() => {
@@ -124,63 +114,8 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [sources]);
 
-  // Close dropdown on outside click
-
   const handleRowClick = (source: Source) => {
     navigate(`/app/dashboard/${source.id}`);
-  };
-
-  const handleDeleteAllSources = async () => {
-    setDeleting(true);
-    setDeleteError('');
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (pb.authStore.token) {
-        headers['Authorization'] = pb.authStore.token;
-      }
-      const res = await fetch('/api/cascade-delete', {
-        method: 'POST',
-        headers,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Server error: ${res.status}`);
-      }
-      const result = await res.json();
-      console.log('Cascade delete result:', result.deleted);
-    } catch (err) {
-      console.error('Delete all sources failed:', err);
-      setDeleteError(err instanceof Error ? err.message : 'Unknown error');
-      setDeleting(false);
-      return;
-    }
-
-    // Reload stats and sources
-    try {
-      const [sourcesRes, channelsRes, moviesRes, seriesRes, episodesRes] = await Promise.all([
-        pb.collection('sources').getList(1, 1, { filter: '1=1' }),
-        pb.collection('channels').getList(1, 1, { filter: 'available = true' }),
-        pb.collection('movies').getList(1, 1, { filter: 'available = true' }),
-        pb.collection('series').getList(1, 1, { filter: 'available = true' }),
-        pb.collection('series_episodes').getList(1, 1, { filter: 'available = true' }),
-      ]);
-      setStats({
-        sources: sourcesRes.totalItems,
-        channels: channelsRes.totalItems,
-        movies: moviesRes.totalItems,
-        series: seriesRes.totalItems,
-        episodes: episodesRes.totalItems,
-      });
-      setSources([]);
-      setTotalPages(1);
-      setTotalItems(0);
-      setPage(1);
-    } catch (err) {
-      console.error('Failed to reload stats:', err);
-    } finally {
-      setDeleting(false);
-      setDeleteDialogOpen(false);
-    }
   };
 
   return (
@@ -197,14 +132,6 @@ export default function Dashboard() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Sources</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              🗑️ Delete All
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -293,32 +220,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Delete All Sources confirmation dialog */}
-      {deleteDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !deleting && setDeleteDialogOpen(false)}>
-          <div className="relative z-50 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold">Delete All Sources</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This will permanently delete all sources and their related data
-              (channels, movies, series, categories, sync jobs).
-            </p>
-            <p className="mt-3 text-sm font-medium text-destructive">
-              This action cannot be undone.
-            </p>
-            {deleteError && (
-              <p className="mt-2 text-sm text-destructive">{deleteError}</p>
-            )}
-            <div className="mt-6 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteAllSources} disabled={deleting}>
-                {deleting ? 'Deleting...' : 'Delete Everything'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
