@@ -92,7 +92,7 @@ export interface SeriesEpisode extends RecordModel {
 
 export interface SyncJob extends RecordModel {
   source_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   phase: string;
   progress: number;
   started_at: string;
