@@ -1,7 +1,20 @@
-type ClassValue = string | number | boolean | undefined | null;
+type ClassValue = string | number | boolean | undefined | null | Record<string, boolean>;
 
 export function cn(...inputs: ClassValue[]) {
-  return inputs.filter(Boolean).join(' ');
+  return inputs
+    .filter(Boolean)
+    .map((input) => {
+      if (typeof input === 'string' || typeof input === 'number') return input;
+      if (typeof input === 'object') {
+        return Object.entries(input)
+          .filter(([, value]) => value)
+          .map(([key]) => key)
+          .join(' ');
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
 }
 
 export function formatDuration(seconds: number): string {
