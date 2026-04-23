@@ -37,15 +37,25 @@ export default function SourceDetail() {
         const src = await pb.collection('sources').getOne<Source>(id);
         if (!cancelled) setSource(src);
 
-        const [liveCats, vodCats, seriesCats] = await Promise.all([
-          pb.collection('categories').getFullList<Category>({ filter: `source_id="${id}" && type="live"` }),
-          pb.collection('categories').getFullList<Category>({ filter: `source_id="${id}" && type="vod"` }),
-          pb.collection('categories').getFullList<Category>({ filter: `source_id="${id}" && type="series"` }),
+        // Use raw fetch — pb.collection().getList() causes ERR_ABORTED
+        // in PocketBase SDK v0.25.2 when called on the categories collection.
+        const headers: Record<string, string> = {};
+        if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+        const fetchCats = async (type: string) => {
+          const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="${type}"`)}`;
+          const res = await fetch(url, { headers });
+          if (!res.ok) throw new Error(`Failed to fetch ${type} categories: ${res.status}`);
+          return res.json();
+        };
+        const [liveCatsData, vodCatsData, seriesCatsData] = await Promise.all([
+          fetchCats('live'),
+          fetchCats('vod'),
+          fetchCats('series'),
         ]);
         if (!cancelled) {
-          setLiveCategories(liveCats);
-          setVodCategories(vodCats);
-          setSeriesCategories(seriesCats);
+          setLiveCategories(liveCatsData.items as Category[]);
+          setVodCategories(vodCatsData.items as Category[]);
+          setSeriesCategories(seriesCatsData.items as Category[]);
         }
       } catch (err) {
         console.error(err);
@@ -57,7 +67,6 @@ export default function SourceDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // Load live channels
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -77,7 +86,6 @@ export default function SourceDetail() {
     return () => { cancelled = true; };
   }, [id, selectedLiveCat, search]);
 
-  // Load movies
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -97,7 +105,6 @@ export default function SourceDetail() {
     return () => { cancelled = true; };
   }, [id, selectedVodCat, search]);
 
-  // Load series
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -118,6 +125,7 @@ export default function SourceDetail() {
   }, [id, selectedSeriesCat, search]);
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
+
   if (!source) return <div className="text-muted-foreground">Source not found.</div>;
 
   return (

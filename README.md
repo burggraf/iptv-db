@@ -75,6 +75,27 @@ All content tables (channels, movies, series) have:
 - **Category index** for global category browsing
 - **Name index** for search
 
+## Deployment
+
+```bash
+# Deploy everything (builds frontend, syncs to server)
+./deploy.sh
+
+# Deploy with custom SSH host
+./deploy.sh --ssh-host root@myserver.example.com
+
+# Deploy without rebuilding (uses existing dist/)
+./deploy.sh --skip-build
+```
+
+### Manual deploy
+
+```bash
+cd frontend && npm run build
+rsync -avz --delete dist/ root@zzzx.uk:/opt/iptv/pb_public/
+ssh root@zzzx.uk "find /opt/iptv/pb_public -name '._*' -delete"
+```
+
 ## Operations
 
 ### Backup
