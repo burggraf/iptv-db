@@ -59,24 +59,26 @@ export class SyncEngine {
   }
 
   /**
-   * Update the latest sync job to cancelled status.
+   * Cancel ALL running/queued sync jobs for a source.
+   * Important: there can be stale "running" jobs from previous crashed syncs,
+   * and the polling UI will find them if we don't cancel them too.
    */
   async cancelSyncJob(sourceId) {
     try {
-      const jobs = await this.pb.collection('sync_jobs').getList(1, 1, {
-        filter: `source_id="${sourceId}"`,
-        sort: '-created',
+      const jobs = await this.pb.collection('sync_jobs').getFullList({
+        filter: `source_id="${sourceId}" && (status="running" || status="queued")`,
       });
-      if (jobs.items.length > 0) {
-        await this.pb.collection('sync_jobs').update(jobs.items[0].id, {
+      const finishedAt = new Date().toISOString();
+      for (const job of jobs) {
+        await this.pb.collection('sync_jobs').update(job.id, {
           status: 'cancelled',
           phase: 'Cancelled by user',
-          finished_at: new Date().toISOString(),
+          finished_at: finishedAt,
         });
-        console.log(`[engine] Updated sync job ${jobs.items[0].id} to cancelled`);
       }
+      console.log(`[engine] Cancelled ${jobs.length} sync job(s) for ${sourceId}`);
     } catch (err) {
-      console.error(`[engine] Failed to cancel sync job for ${sourceId}:`, err.message);
+      console.error(`[engine] Failed to cancel sync job(s) for ${sourceId}:`, err.message);
     }
   }
 
