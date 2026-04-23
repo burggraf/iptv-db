@@ -12,7 +12,7 @@ const PB_ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD || 'changeme';
 const SYNC_CONCURRENCY = parseInt(process.env.SYNC_CONCURRENCY || '3', 10);
 
 // Connect to PocketBase as admin
-const pb = new PocketBase(PB_URL, { autoCancellation: false });
+const pb = new PocketBase(PB_URL);
 await pb.admins.authWithPassword(PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD);
 console.log(`[worker] Connected to PocketBase at ${PB_URL}`);
 

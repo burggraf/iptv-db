@@ -171,24 +171,36 @@ export class SyncEngine {
         started_at: status === 'queued' ? null : new Date().toISOString(),
       });
     } catch (err) {
+      if (err?.isAbort) return; // auto-cancelled, ignore
       console.error('[engine] Failed to create sync job record:', err.message);
     }
   }
 
   /**
    * Update the most recent sync job for a source.
+   * Retries on auto-cancellation errors since PocketBase cancels concurrent requests.
    */
   async updateSyncJob(sourceId, updates) {
-    try {
-      const jobs = await this.pb.collection('sync_jobs').getList(1, 1, {
-        filter: `source_id="${sourceId}"`,
-        sort: '-created',
-      });
-      if (jobs.items.length > 0) {
-        await this.pb.collection('sync_jobs').update(jobs.items[0].id, updates);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const jobs = await this.pb.collection('sync_jobs').getList(1, 1, {
+          filter: `source_id="${sourceId}"`,
+          sort: '-created',
+        });
+        if (jobs.items.length > 0) {
+          await this.pb.collection('sync_jobs').update(jobs.items[0].id, updates);
+        }
+        return; // success
+      } catch (err) {
+        if (err?.isAbort) {
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 200 * attempt));
+            continue;
+          }
+        }
+        console.error('[engine] Failed to update sync job:', err.message);
+        return;
       }
-    } catch (err) {
-      console.error('[engine] Failed to update sync job:', err.message);
     }
   }
 
