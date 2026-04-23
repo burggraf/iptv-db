@@ -71,13 +71,16 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
   const channelCount = await syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled);
 
   // --- Movie & series counts only (no per-item cataloging) ---
-  onProgress('Fetching movie count...', 55);
+  // Fetch both in parallel with a short timeout so one slow server doesn't block the sync.
+  onProgress('Fetching movie and series counts...', 55);
   checkCancelled(isCancelled);
-  const movieCount = await getMovieCount(xtream, isCancelled);
+  const [movieResult, seriesResult] = await Promise.allSettled([
+    timedCount(xtream.getVodStreams.bind(xtream), 15_000, 'VOD'),
+    timedCount(xtream.getSeries.bind(xtream), 15_000, 'series'),
+  ]);
 
-  onProgress('Fetching series count...', 70);
-  checkCancelled(isCancelled);
-  const seriesCount = await getSeriesCount(xtream, isCancelled);
+  const movieCount = movieResult.status === 'fulfilled' ? movieResult.value : 0;
+  const seriesCount = seriesResult.status === 'fulfilled' ? seriesResult.value : 0;
 
   // Store counts on the source record
   await pb.collection('sources').update(sourceId, {
@@ -251,27 +254,15 @@ async function flushChannelBatch(pb, existingMap, batch, streamIds) {
 }
 
 /**
- * Fetch movie count only (no per-item cataloging).
+ * Fetch a stream list with a hard timeout, returning just the count.
+ * Used for movie/series counts — non-critical, so failures are silent.
  */
-async function getMovieCount(xtream, isCancelled) {
-  try {
-    const streams = await xtream.getVodStreams();
-    return Array.isArray(streams) ? streams.length : 0;
-  } catch (err) {
-    console.warn(`[sync-job] Failed to fetch VOD stream count:`, err.message);
-    return 0;
-  }
-}
-
-/**
- * Fetch series count only (no per-item cataloging).
- */
-async function getSeriesCount(xtream, isCancelled) {
-  try {
-    const seriesList = await xtream.getSeries();
-    return Array.isArray(seriesList) ? seriesList.length : 0;
-  } catch (err) {
-    console.warn(`[sync-job] Failed to fetch series count:`, err.message);
-    return 0;
-  }
+async function timedCount(fetchFn, timeoutMs, label) {
+  const timer = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} count fetch timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+  );
+  const result = await Promise.race([fetchFn(), timer]);
+  const count = Array.isArray(result) ? result.length : 0;
+  console.log(`[sync-job] ${label} count: ${count}`);
+  return count;
 }
