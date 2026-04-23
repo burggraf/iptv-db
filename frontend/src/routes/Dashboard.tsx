@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source } from '../types/database';
@@ -9,9 +9,22 @@ import { Input } from '../components/ui/input';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
+import {
+  Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter,
+} from '../components/ui/dialog';
 import { formatDateTime } from '../lib/utils';
 
 const PAGE_SIZE = 100;
+
+// Collections to cascade delete when removing all sources, in dependency order
+const CASCADE_COLLECTIONS = [
+  'series_episodes', // references series (not source directly)
+  'channels',        // references source
+  'movies',          // references source
+  'series',          // references source
+  'categories',      // references source
+  'sync_jobs',       // references source
+];
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -29,6 +42,15 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+
+  // Settings dropdown state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Delete all sources confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState('');
 
   // Load stats
   useEffect(() => {
@@ -111,11 +133,73 @@ export default function Dashboard() {
       if (!cancelled) setCounts(newCounts);
     };
     loadCounts();
-    return () => { cancelled = true; };
+    return () => { cancelled = true };
   }, [sources]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [settingsOpen]);
 
   const handleRowClick = (source: Source) => {
     navigate(`/app/dashboard/${source.id}`);
+  };
+
+  const handleDeleteAllSources = async () => {
+    setDeleting(true);
+    try {
+      // Phase 1: Delete cascade collections
+      for (const collection of CASCADE_COLLECTIONS) {
+        setDeleteProgress(`Deleting all ${collection}...`);
+        const records = await pb.collection(collection).getFullList(5000);
+        const ids = records.map((r: { id: string }) => r.id);
+        await Promise.all(ids.map((id: string) => pb.collection(collection).delete(id)));
+      }
+
+      // Phase 2: Delete sources
+      setDeleteProgress('Deleting all sources...');
+      const sourceRecords = await pb.collection('sources').getFullList(5000);
+      const sourceIds = sourceRecords.map((r: { id: string }) => r.id);
+      await Promise.all(sourceIds.map((id: string) => pb.collection('sources').delete(id)));
+
+      setDeleteProgress('Done!');
+      // Reload stats and sources
+      const [sourcesRes, channelsRes, moviesRes, seriesRes, episodesRes] = await Promise.all([
+        pb.collection('sources').getList(1, 1, { filter: '1=1' }),
+        pb.collection('channels').getList(1, 1, { filter: 'available = true' }),
+        pb.collection('movies').getList(1, 1, { filter: 'available = true' }),
+        pb.collection('series').getList(1, 1, { filter: 'available = true' }),
+        pb.collection('series_episodes').getList(1, 1, { filter: 'available = true' }),
+      ]);
+      setStats({
+        sources: sourcesRes.totalItems,
+        channels: channelsRes.totalItems,
+        movies: moviesRes.totalItems,
+        series: seriesRes.totalItems,
+        episodes: episodesRes.totalItems,
+      });
+      setSources([]);
+      setTotalPages(1);
+      setTotalItems(0);
+      setPage(1);
+    } catch (err) {
+      console.error('Delete all sources failed:', err);
+      setDeleteProgress('Error during deletion. Check console.');
+    } finally {
+      setDeleting(false);
+      // Keep dialog open briefly to show completion/error, then close
+      setTimeout(() => {
+        setDeleteDialogOpen(false);
+        setDeleteProgress('');
+      }, 1500);
+    }
   };
 
   return (
@@ -132,7 +216,35 @@ export default function Dashboard() {
       {/* Sources list */}
       <Card>
         <CardHeader>
-          <CardTitle>Sources</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Sources</CardTitle>
+
+            {/* Settings dropdown */}
+            <div className="relative" ref={settingsRef}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSettingsOpen(!settingsOpen)}
+              >
+                ⚙️ Settings
+              </Button>
+              {settingsOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
+                  <div className="py-1">
+                    <button
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      🗑️ Delete All Sources
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -219,6 +331,45 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete All Sources confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
+        <DialogHeader>
+          <DialogTitle>Delete All Sources</DialogTitle>
+          {deleting ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{deleteProgress}</p>
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary animate-pulse rounded-full" style={{ width: '60%' }} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <DialogDescription>
+                This will permanently delete all sources and all their related data, including:
+              </DialogDescription>
+              <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1 mt-2">
+                <li>All channels</li>
+                <li>All movies</li>
+                <li>All series and episodes</li>
+                <li>All categories</li>
+                <li>All sync job records</li>
+              </ul>
+              <p className="text-sm text-destructive font-medium mt-3">
+                This action cannot be undone.
+              </p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteAllSources}>
+                  Delete Everything
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogHeader>
+      </Dialog>
     </div>
   );
 }
