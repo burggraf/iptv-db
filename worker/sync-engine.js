@@ -136,15 +136,21 @@ export class SyncEngine {
       // Mark as failed
       await this.updateSyncJob(sourceId, {
         status: 'failed',
-        phase: 'Failed',
+        phase: `Failed after ${maxRetries} attempts`,
         error: err.message,
         finished_at: new Date().toISOString(),
       });
 
-      await this.pb.collection('sources').update(sourceId, {
-        status: 'error',
-        sync_status: err.message,
-      });
+      try {
+        await this.pb.collection('sources').update(sourceId, {
+          status: 'error',
+          sync_status: err.message,
+        });
+      } catch (updateErr) {
+        console.error(`[engine] Failed to update source status to error:`, updateErr.message);
+      }
+
+      console.log(`[engine] Source ${sourceId} failed permanently: ${err.message}`);
     } finally {
       this.running.delete(sourceId);
       this.activeWorkers--;

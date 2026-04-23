@@ -144,9 +144,17 @@ export default function SourceDetail() {
           filter: `source_id="${id}" && (status="running" || status="queued")`,
           sort: '-created',
         });
-        const job = jobs.items[0] ?? null;
-        setSyncJob(job);
-        setIsSyncing(!!job);
+        const activeJob = jobs.items[0] ?? null;
+        setSyncJob(activeJob);
+        setIsSyncing(!!activeJob);
+        if (activeJob) return;
+
+        // No active job — check for most recent failed job
+        const failed = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
+          filter: `source_id="${id}" && status="failed"`,
+          sort: '-created',
+        });
+        setSyncJob(failed.items[0] ?? null);
       } catch { /* ignore */ }
     };
     checkJob();
@@ -205,6 +213,12 @@ export default function SourceDetail() {
               </div>
             </div>
           )}
+          {!isSyncing && syncJob?.error && (
+            <div className="mb-4 rounded-lg border border-destructive/50 p-3">
+              <p className="text-sm font-medium text-destructive">Sync failed: {syncJob.phase || 'All retries exhausted'}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{syncJob.error}</p>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-4 text-sm">
             <div>
               <span className="text-muted-foreground">Username</span>
@@ -223,7 +237,7 @@ export default function SourceDetail() {
               <p className="font-medium">{formatDateTime(source.last_sync)}</p>
             </div>
           </div>
-          {source.sync_status && source.sync_status !== 'ok' && (
+          {source.sync_status && source.sync_status !== 'ok' && !syncJob?.error && (
             <p className="mt-2 text-sm text-destructive">{source.sync_status}</p>
           )}
         </CardContent>
