@@ -1,12 +1,20 @@
 import { useState, useEffect } from 'react';
-import { pb, pbCall, isAbortError } from '../lib/pocketbase';
-import type { Source, SyncJob } from '../types/database';
+import { useNavigate } from 'react-router';
+import { pb, isAbortError } from '../lib/pocketbase';
+import type { Source } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Progress } from '../components/ui/progress';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '../components/ui/table';
 import { formatDateTime } from '../lib/utils';
 
+const PAGE_SIZE = 100;
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     sources: 0,
     channels: 0,
@@ -14,15 +22,19 @@ export default function Dashboard() {
     series: 0,
     episodes: 0,
   });
-  const [recentJobs, setRecentJobs] = useState<(SyncJob & { expand?: { source_id: Source } })[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [counts, setCounts] = useState<Record<string, { channels: number; movies: number; series: number }>>({});
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
+  // Load stats
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      setLoading(true);
       try {
-        // Get counts
         const [sourcesRes, channelsRes, moviesRes, seriesRes, episodesRes] = await Promise.all([
           pb.collection('sources').getList(1, 1, { filter: '1=1' }),
           pb.collection('channels').getList(1, 1, { filter: 'available = true' }),
@@ -30,13 +42,6 @@ export default function Dashboard() {
           pb.collection('series').getList(1, 1, { filter: 'available = true' }),
           pb.collection('series_episodes').getList(1, 1, { filter: 'available = true' }),
         ]);
-
-        // Recent sync jobs
-        const jobsRes = await pb.collection('sync_jobs').getList(1, 10, {
-          sort: '-created',
-          expand: 'source_id',
-        });
-
         if (!cancelled) {
           setStats({
             sources: sourcesRes.totalItems,
@@ -45,7 +50,6 @@ export default function Dashboard() {
             series: seriesRes.totalItems,
             episodes: episodesRes.totalItems,
           });
-          setRecentJobs(jobsRes.items);
         }
       } catch (err) {
         if (!isAbortError(err)) console.error('Dashboard load error:', err);
@@ -57,97 +61,177 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Subscribe to sync job updates
+  // Load paginated sources
   useEffect(() => {
-    const unsub = pb.collection('sync_jobs').subscribe('*', () => {
-      // Refresh recent jobs on any sync job change; abort errors are silently ignored
-      pbCall(() =>
-        pb.collection('sync_jobs').getList(1, 10, {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        let filter = '1=1';
+        if (search) {
+          filter = `name ~ "${search}" || base_url ~ "${search}"`;
+        }
+        const res = await pb.collection('sources').getList<Source>(page, PAGE_SIZE, {
+          filter,
           sort: '-created',
-          expand: 'source_id',
-        })
-      ).then((res) => {
-        if (res) setRecentJobs(res.items);
-      }).catch(() => { /* non-abort errors suppressed for realtime updates */ });
-    });
-    return () => { unsub.then((u) => u()); };
-  }, []);
+        });
+        if (!cancelled) {
+          setSources(res.items);
+          setTotalPages(res.totalPages);
+          setTotalItems(res.totalItems);
+        }
+      } catch (err) {
+        if (!isAbortError(err)) console.error(err);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [search, page]);
 
-  if (loading) return <div className="text-muted-foreground">Loading...</div>;
+  // Load counts for visible sources
+  useEffect(() => {
+    if (sources.length === 0) {
+      setCounts({});
+      return;
+    }
+    let cancelled = false;
+    const loadCounts = async () => {
+      const newCounts: Record<string, { channels: number; movies: number; series: number }> = {};
+      await Promise.all(
+        sources.map(async (s) => {
+          try {
+            const [ch, mv, sr] = await Promise.all([
+              pb.collection('channels').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
+              pb.collection('movies').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
+              pb.collection('series').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
+            ]);
+            newCounts[s.id] = { channels: ch.totalItems, movies: mv.totalItems, series: sr.totalItems };
+          } catch { /* skip */ }
+        }),
+      );
+      if (!cancelled) setCounts(newCounts);
+    };
+    loadCounts();
+    return () => { cancelled = true; };
+  }, [sources]);
+
+  const handleRowClick = (source: Source) => {
+    navigate(`/app/sources/${source.id}`);
+  };
 
   return (
     <div className="space-y-6">
       {/* Stats cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Sources" value={stats.sources} />
-        <StatCard label="Channels" value={stats.channels} />
-        <StatCard label="Movies" value={stats.movies} />
-        <StatCard label="Series" value={stats.series} />
-        <StatCard label="Episodes" value={stats.episodes} />
+        <StatCard label="Sources" value={stats.sources} loading={loading} />
+        <StatCard label="Channels" value={stats.channels} loading={loading} />
+        <StatCard label="Movies" value={stats.movies} loading={loading} />
+        <StatCard label="Series" value={stats.series} loading={loading} />
+        <StatCard label="Episodes" value={stats.episodes} loading={loading} />
       </div>
 
-      {/* Recent sync activity */}
+      {/* Sources list */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sync Activity</CardTitle>
+          <CardTitle>Sources</CardTitle>
         </CardHeader>
         <CardContent>
-          {recentJobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sync jobs yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {recentJobs.map((job) => (
-                <div key={job.id} className="flex items-center gap-4 rounded-lg border p-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">
-                        {job.expand?.source_id?.name || 'Unknown'}
-                      </span>
-                      <SyncStatusBadge status={job.status} />
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {job.phase || ''}
-                    </p>
-                  </div>
-                  <div className="w-32 shrink-0">
-                    {job.status === 'running' && (
-                      <Progress value={job.progress || 0} className="h-2" />
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {formatDateTime(job.created)}
-                    </span>
-                  </div>
-                </div>
-              ))}
+          <div className="space-y-4">
+            {/* Search bar */}
+            <div className="flex items-center gap-4">
+              <Input
+                placeholder="Search sources..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="max-w-sm"
+              />
+              <span className="text-sm text-muted-foreground">
+                {totalItems.toLocaleString()} source{totalItems !== 1 ? 's' : ''}
+              </span>
             </div>
-          )}
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Base URL</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Connections</TableHead>
+                  <TableHead>Expiry</TableHead>
+                  <TableHead>Channels</TableHead>
+                  <TableHead>Movies</TableHead>
+                  <TableHead>Series</TableHead>
+                  <TableHead>Last Sync</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">Loading...</TableCell>
+                  </TableRow>
+                ) : sources.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No sources found. Add one in Settings.</TableCell>
+                  </TableRow>
+                ) : (
+                  sources.map((s) => (
+                    <TableRow
+                      key={s.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleRowClick(s)}
+                    >
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
+                      <TableCell className="max-w-[200px] truncate text-muted-foreground">{s.base_url || '—'}</TableCell>
+                      <TableCell>
+                        <Badge variant={s.status === 'active' ? 'success' : s.status === 'error' ? 'destructive' : 'secondary'}>
+                          {s.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{s.max_connections ?? '—'}</TableCell>
+                      <TableCell>{formatDateTime(s.expiry_date)}</TableCell>
+                      <TableCell>{counts[s.id]?.channels ?? '—'}</TableCell>
+                      <TableCell>{counts[s.id]?.movies ?? '—'}</TableCell>
+                      <TableCell>{counts[s.id]?.series ?? '—'}</TableCell>
+                      <TableCell>{formatDateTime(s.last_sync)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                    Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+        <div className="text-2xl font-bold">{loading ? '—' : value.toLocaleString()}</div>
       </CardContent>
     </Card>
   );
-}
-
-function SyncStatusBadge({ status }: { status: string }) {
-  const variant = {
-    queued: 'secondary',
-    running: 'default',
-    completed: 'success',
-    failed: 'destructive',
-    cancelled: 'outline',
-  }[status] as 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
-
-  return <Badge variant={variant}>{status}</Badge>;
 }
