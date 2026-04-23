@@ -52,3 +52,12 @@ export function formatDateTime(dateStr: string | null | undefined): string {
     return dateStr;
   }
 }
+
+/** Rewrite external http:// image URLs through the HTTPS proxy to avoid mixed-content blocking. */
+export function proxyImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://')) {
+    return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}

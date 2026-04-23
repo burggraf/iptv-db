@@ -4,6 +4,7 @@ import type { ChannelExpanded, Source, Category } from '../types/database';
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { proxyImageUrl } from '../lib/utils';
 
 interface ChannelDetailModalProps {
   channelId: string | null;
@@ -82,6 +83,9 @@ export default function ChannelDetailModal({ channelId, onClose }: ChannelDetail
     { label: 'Logo', value: channel?.logo ? (
       <a href={channel.logo} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{channel.logo}</a>
     ) : '—' },
+    { label: 'Logo (preview)', value: channel?.logo ? (
+      <img src={proxyImageUrl(channel.logo) ?? ''} alt="" className="w-16 h-16 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
+    ) : '—' },
     { label: 'EPG ID', value: channel?.epg_id || '—' },
     { label: 'TVG ID', value: channel?.tvg_id || '—' },
     { label: 'Country', value: channel?.tvg_country || '—' },
@@ -103,9 +107,7 @@ export default function ChannelDetailModal({ channelId, onClose }: ChannelDetail
       <DialogHeader>
         <DialogTitle>
           <div className="flex items-center gap-2">
-            {channel?.logo && (
-              <img src={channel.logo} alt="" className="w-6 h-6 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
-            )}
+            {(() => { const logoUrl = proxyImageUrl(channel?.logo); return logoUrl && <img src={logoUrl} alt="" className="w-6 h-6 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />; })()}
             {loading ? 'Loading...' : channel?.name || 'Channel Details'}
           </div>
         </DialogTitle>

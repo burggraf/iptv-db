@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
-import { formatDateTime, formatDate } from '../lib/utils';
+import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
 import ChannelDetailModal from '../components/ChannelDetailModal';
 
 export default function SourceDetail() {
@@ -216,7 +216,7 @@ export default function SourceDetail() {
                   <TableRow key={ch.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedChannelId(ch.id)}>
                     <TableCell>
                       <span className="flex items-center gap-2">
-                        {ch.logo && <img src={ch.logo} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        {(() => { const logoUrl = proxyImageUrl(ch.logo); return logoUrl ? <img src={logoUrl} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} /> : null; })()}
                         {ch.name}
                       </span>
                     </TableCell>
