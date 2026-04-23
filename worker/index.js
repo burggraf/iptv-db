@@ -9,7 +9,7 @@ try { dotenv.config({ path: '../.env' }); } catch {}
 const PB_URL = process.env.POCKETBASE_URL || 'http://127.0.0.1:8090';
 const PB_ADMIN_EMAIL = process.env.PB_ADMIN_EMAIL || 'admin@iptv.local';
 const PB_ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD || 'changeme';
-const SYNC_CONCURRENCY = parseInt(process.env.SYNC_CONCURRENCY || '3', 10);
+const SYNC_CONCURRENCY = parseInt(process.env.SYNC_CONCURRENCY || '1', 10);
 
 // Connect to PocketBase as admin
 const pb = new PocketBase(PB_URL);

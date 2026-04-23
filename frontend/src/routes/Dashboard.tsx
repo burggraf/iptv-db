@@ -166,10 +166,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadActiveJobs();
+    let timer: ReturnType<typeof setTimeout>;
     const unsub = pb.collection('sync_jobs').subscribe('*', () => {
-      loadActiveJobs();
+      clearTimeout(timer);
+      timer = setTimeout(loadActiveJobs, 2000);
     });
-    return () => { unsub.then((u: () => void) => u()); };
+    return () => {
+      clearTimeout(timer);
+      unsub.then((u: () => void) => u());
+    };
   }, []);
 
   const handleSync = async (sourceId: string) => {
