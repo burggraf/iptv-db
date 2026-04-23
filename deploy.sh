@@ -87,7 +87,16 @@ fi
 ssh "$SSH_HOST" "cd $REMOTE_BASE/worker && npm install --omit=dev --quiet 2>&1"
 echo "✓ Worker synced"
 
-# 8. Restart services
+# 8. Sync pb_hooks
+echo "→ Syncing pb_hooks..."
+if [ -d "$SCRIPT_DIR/pb_hooks" ]; then
+  rsync -avz --delete "$SCRIPT_DIR/pb_hooks/" "$SSH_HOST:$REMOTE_BASE/pb_hooks/"
+  echo "✓ pb_hooks synced"
+else
+  echo "⊘ No pb_hooks to sync"
+fi
+
+# 9. Restart services
 ssh "$SSH_HOST" "
 systemctl restart iptv-pb.service
 sleep 2
@@ -96,7 +105,7 @@ sleep 2
 "
 echo "✓ Services restarted"
 
-# 9. Verify deployment
+# 10. Verify deployment
 echo "→ Verifying..."
 FILES=$(ssh "$SSH_HOST" "ls $REMOTE_BASE/pb_public/assets/ 2>/dev/null | wc -l")
 echo "  Server pb_public/assets: $FILES files"
