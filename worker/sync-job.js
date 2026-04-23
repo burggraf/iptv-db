@@ -255,13 +255,18 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
  * Flush a batch of channel upserts.
  */
 async function flushChannelBatch(pb, existingMap, batch, streamIds) {
-  const promises = batch.map((data) => {
+  const promises = batch.map(async (data) => {
     const existing = existingMap.get(data.stream_id);
-    if (existing) {
-      streamIds.add(data.stream_id);
-      return pb.collection('channels').update(existing.id, { ...data, available: true });
-    } else {
-      return pb.collection('channels').create(data);
+    try {
+      if (existing) {
+        streamIds.add(data.stream_id);
+        await pb.collection('channels').update(existing.id, { ...data, available: true });
+      } else {
+        await pb.collection('channels').create(data);
+        streamIds.add(data.stream_id);
+      }
+    } catch (err) {
+      console.warn(`[sync-job] Channel upsert failed: stream_id=${data.stream_id} ${err.message}`);
     }
   });
   await Promise.allSettled(promises);
