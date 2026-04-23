@@ -17,9 +17,6 @@ export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
   const [source, setSource] = useState<Source | null>(null);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
-  const [channelCount, setChannelCount] = useState(0);
-  const [vodCount, setVodCount] = useState(0);
-  const [seriesCount, setSeriesCount] = useState(0);
   const [selectedLiveCat, setSelectedLiveCat] = useState('');
   const [liveChannels, setLiveChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,30 +36,10 @@ export default function SourceDetail() {
 
         const headers: Record<string, string> = {};
         if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
-        const fetchCats = async (type: string) => {
-          const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="${type}"`)}`;
-          const res = await fetch(url, { headers });
-          if (!res.ok) throw new Error(`Failed to fetch ${type} categories: ${res.status}`);
-          return res.json();
-        };
-        const fetchCount = async (collection: string) => {
-          const url = `/api/collections/${collection}/records?page=1&perPage=1&filter=${encodeURIComponent(`source_id="${id}"`)}`;
-          const res = await fetch(url, { headers });
-          if (!res.ok) throw new Error(`Failed to fetch ${collection} count: ${res.status}`);
-          return res.json();
-        };
-        const [liveCatsData, channelsData, vodData, seriesData] = await Promise.all([
-          fetchCats('live'),
-          fetchCount('channels'),
-          fetchCount('movies'),
-          fetchCount('series'),
-        ]);
-        if (!cancelled) {
-          setLiveCategories(liveCatsData.items as Category[]);
-          setChannelCount(channelsData.totalItems ?? 0);
-          setVodCount(vodData.totalItems ?? 0);
-          setSeriesCount(seriesData.totalItems ?? 0);
-        }
+        const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="live"`)}`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`Failed to fetch live categories: ${res.status}`);
+        if (!cancelled) setLiveCategories(res.json().items as Category[]);
       } catch (err) {
         if (!isAbortError(err)) console.error(err);
       } finally {
@@ -201,9 +178,9 @@ export default function SourceDetail() {
 
       {/* Content counts */}
       <div className="flex flex-wrap gap-6 text-sm">
-        <span><span className="font-semibold">{channelCount.toLocaleString()}</span> <span className="text-muted-foreground">Channels</span></span>
-        <span><span className="font-semibold">{vodCount.toLocaleString()}</span> <span className="text-muted-foreground">Movies</span></span>
-        <span><span className="font-semibold">{seriesCount.toLocaleString()}</span> <span className="text-muted-foreground">Series</span></span>
+        <span><span className="font-semibold">{source.channel_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Channels</span></span>
+        <span><span className="font-semibold">{source.movie_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Movies</span></span>
+        <span><span className="font-semibold">{source.series_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Series</span></span>
       </div>
 
       {/* Live channels */}
