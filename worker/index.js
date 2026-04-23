@@ -46,6 +46,8 @@ const server = http.createServer(async (req, res) => {
     await handleScrape(req, res);
   } else if (req.method === 'POST' && url.pathname === '/api/sync') {
     await handleSync(req, res);
+  } else if (req.method === 'POST' && url.pathname.startsWith('/api/sync/')) {
+    await handleSyncCancel(req, res, url);
   } else if (req.method === 'GET' && url.pathname === '/api/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -116,6 +118,27 @@ async function handleSync(req, res) {
     syncEngine.enqueue(sourceId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ queued: true, source_id: sourceId }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(err.message);
+  }
+}
+
+async function handleSyncCancel(req, res, url) {
+  // Extract source_id from /api/sync/:sourceId/cancel
+  const parts = url.pathname.split('/').filter(Boolean);
+  // parts = ['api', 'sync', ':sourceId', 'cancel']
+  const sourceId = parts[2];
+
+  if (!sourceId) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Missing source_id');
+  }
+
+  try {
+    syncEngine.cancel(sourceId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ cancelled: true, source_id: sourceId }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'text/plain' });
     res.end(err.message);

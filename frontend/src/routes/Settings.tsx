@@ -111,6 +111,24 @@ export default function Settings() {
     }
   };
 
+  const handleCancel = async (sourceId: string) => {
+    try {
+      await fetch(`${WORKER_BASE}/api/sync/${sourceId}/cancel`, {
+        method: 'POST',
+      });
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    }
+  };
+
+  const handleCancelAll = async () => {
+    for (const s of sources) {
+      if (activeJobs[s.id]) {
+        handleCancel(s.id);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Scrape URL */}
@@ -151,9 +169,16 @@ export default function Settings() {
             <CardTitle>Sync Sources</CardTitle>
             <CardDescription>Manually trigger catalog sync for each source.</CardDescription>
           </div>
-          <Button onClick={handleSyncAll} disabled={sources.length === 0}>
-            Sync All
-          </Button>
+          <div className="flex gap-2">
+            {Object.keys(activeJobs).length > 0 && (
+              <Button variant="outline" onClick={handleCancelAll}>
+                Cancel All ({Object.keys(activeJobs).length})
+              </Button>
+            )}
+            <Button onClick={handleSyncAll} disabled={sources.length === 0}>
+              Sync All
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -191,14 +216,25 @@ export default function Settings() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSync(s.id)}
-                        disabled={syncing[s.id] || !!job}
-                      >
-                        {syncing[s.id] ? 'Starting...' : 'Sync'}
-                      </Button>
+                      {job ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => handleCancel(s.id)}
+                        >
+                          Cancel
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSync(s.id)}
+                          disabled={syncing[s.id]}
+                        >
+                          {syncing[s.id] ? 'Starting...' : 'Sync'}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );

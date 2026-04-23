@@ -1,11 +1,32 @@
 import { XtreamClient } from './xtream.js';
 
 /**
+ * Thrown when a sync operation is cancelled by the user.
+ */
+export class CancelledError extends Error {
+  constructor(message = 'Sync cancelled by user') {
+    super(message);
+    this.name = 'CancelledError';
+    this.code = 'CANCELLED';
+  }
+}
+
+/**
+ * Check if the sync has been cancelled and throw if so.
+ */
+function checkCancelled(isCancelled) {
+  if (isCancelled && isCancelled()) {
+    throw new CancelledError();
+  }
+}
+
+/**
  * Sync a single source: authenticate, fetch categories, streams, episodes.
  * Calls onProgress(phase, percent) to report status.
+ * Accepts an optional isCancelled() callback for cooperative cancellation.
  */
-export async function syncSource(pb, sourceId, onProgress) {
-  // Fetch source record
+export async function syncSource(pb, sourceId, onProgress, isCancelled) {
+
   const source = await pb.collection('sources').getOne(sourceId);
 
   if (!source.base_url || !source.username || !source.password) {
@@ -14,7 +35,6 @@ export async function syncSource(pb, sourceId, onProgress) {
 
   const xtream = new XtreamClient(source.base_url, source.username, source.password);
 
-  // Step 1: Authenticate
   onProgress('Authenticating...', 5);
   let userInfo;
   try {
@@ -23,7 +43,6 @@ export async function syncSource(pb, sourceId, onProgress) {
     throw new Error(`Authentication failed: ${err.message}`);
   }
 
-  // Update source with account info
   await pb.collection('sources').update(sourceId, {
     max_connections: userInfo.maxConnections,
     expiry_date: userInfo.expiry,
@@ -34,25 +53,27 @@ export async function syncSource(pb, sourceId, onProgress) {
     throw new Error(`Account status: ${userInfo.status}`);
   }
 
-  // Step 2: Sync categories
   onProgress('Fetching categories...', 10);
-  const catMap = {}; // { type_categoryId -> pb_record_id }
+  const catMap = {}; // key: "type_categoryId" -> pb_id
 
-  await syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress);
-  await syncCategories(pb, sourceId, 'vod', xtream, catMap, onProgress);
-  await syncCategories(pb, sourceId, 'series', xtream, catMap, onProgress);
+  checkCancelled(isCancelled);
+  await syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress, isCancelled);
+  checkCancelled(isCancelled);
+  await syncCategories(pb, sourceId, 'vod', xtream, catMap, onProgress, isCancelled);
+  checkCancelled(isCancelled);
+  await syncCategories(pb, sourceId, 'series', xtream, catMap, onProgress, isCancelled);
 
-  // Step 3: Sync live channels
   onProgress('Fetching live channels...', 15);
-  await syncLiveChannels(pb, sourceId, xtream, catMap, onProgress);
+  checkCancelled(isCancelled);
+  await syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled);
 
-  // Step 4: Sync movies (VOD)
   onProgress('Fetching movies...', 45);
-  await syncMovies(pb, sourceId, xtream, catMap, onProgress);
+  checkCancelled(isCancelled);
+  await syncMovies(pb, sourceId, xtream, catMap, onProgress, isCancelled);
 
-  // Step 5: Sync series
   onProgress('Fetching series...', 75);
-  await syncSeries(pb, sourceId, xtream, catMap, onProgress);
+  checkCancelled(isCancelled);
+  await syncSeries(pb, sourceId, xtream, catMap, onProgress, isCancelled);
 
   onProgress('Sync complete', 100);
   console.log(`[sync-job] Source ${sourceId} (${source.name}) synced successfully`);
@@ -61,7 +82,8 @@ export async function syncSource(pb, sourceId, onProgress) {
 /**
  * Sync categories for a given type (live, vod, series).
  */
-async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress) {
+async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress, isCancelled) {
+  checkCancelled(isCancelled);
   let categories;
   try {
     categories = type === 'live'
@@ -109,13 +131,21 @@ async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress) {
     }
   }
 
-  // Mark categories no longer in API as unavailable (soft delete not needed for categories — just leave orphaned)
+  // Clean up categories no longer present on the source
+  for (const existingCat of existing) {
+    if (!createdIds.has(existingCat.id)) {
+      try {
+        await pb.collection('categories').delete(existingCat.id);
+      } catch { /* skip */ }
+    }
+  }
 }
 
 /**
  * Sync live channels.
  */
-async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
+async function syncChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
+  checkCancelled(isCancelled);
   let streams;
   try {
     streams = await xtream.getAllLiveStreams();
@@ -124,7 +154,7 @@ async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
     return 0;
   }
 
-  // Get existing channels
+  checkCancelled(isCancelled);
   const existing = await pb.collection('channels').getFullList({
     filter: `source_id="${sourceId}"`,
   });
@@ -137,7 +167,7 @@ async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
   let count = 0;
   const total = streams.length;
 
-  // Batch upserts for performance
+  // Batch upsert
   const batchSize = 100;
   const batch = [];
 
@@ -148,7 +178,7 @@ async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
     const categoryId = stream.category_id;
     const catKey = `live_${categoryId}`;
     const pbCategoryId = catMap[catKey];
-    if (!pbCategoryId) continue; // Skip channels with unknown category
+    if (!pbCategoryId) continue; // category not found, skip
 
     streamIds.add(streamId);
 
@@ -171,6 +201,7 @@ async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
       await flushChannelBatch(pb, existingMap, batch, streamIds);
       count += batch.length;
       batch.length = 0;
+      checkCancelled(isCancelled);
       onProgress(`Syncing channels ${count}/${total}...`, 15 + Math.floor((count / total) * 30));
     }
   }
@@ -181,7 +212,7 @@ async function syncChannels(pb, sourceId, xtream, catMap, onProgress) {
     count += batch.length;
   }
 
-  // Mark unavailable
+  // Mark channels no longer on source as unavailable
   for (const ch of existing) {
     if (!streamIds.has(ch.stream_id) && ch.available) {
       try {
@@ -201,7 +232,7 @@ async function flushChannelBatch(pb, existingMap, batch, streamIds) {
   const promises = batch.map((data) => {
     const existing = existingMap.get(data.stream_id);
     if (existing) {
-      streamIds.add(data.stream_id); // Ensure it's marked available
+      streamIds.add(data.stream_id); // make sure it's tracked
       return pb.collection('channels').update(existing.id, { ...data, available: true });
     } else {
       return pb.collection('channels').create(data);
@@ -213,23 +244,25 @@ async function flushChannelBatch(pb, existingMap, batch, streamIds) {
 /**
  * Sync live channels (properly named).
  */
-async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress) {
-  return syncChannels(pb, sourceId, xtream, catMap, onProgress);
+async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
+  return syncChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled);
 }
 
 /**
  * Sync movies (VOD).
  */
-async function syncMovies(pb, sourceId, xtream, catMap, onProgress) {
+async function syncMovies(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
+  checkCancelled(isCancelled);
   let streams;
   try {
-    // Try fetching all VOD streams first
+    // Get all VOD streams from the Xtream source
     streams = await xtream.getVodStreams();
   } catch (err) {
     console.warn(`[sync-job] Failed to fetch VOD streams:`, err.message);
     return 0;
   }
 
+  checkCancelled(isCancelled);
   const existing = await pb.collection('movies').getFullList({
     filter: `source_id="${sourceId}"`,
   });
@@ -255,7 +288,7 @@ async function syncMovies(pb, sourceId, xtream, catMap, onProgress) {
 
     streamIds.add(streamId);
 
-    // Handle rating — could be a number or a string like "7.5"
+    // Parse rating
     let rating = null;
     if (stream.rating) {
       rating = parseFloat(String(stream.rating).replace(/[^0-9.]/g, ''));
@@ -290,6 +323,7 @@ async function syncMovies(pb, sourceId, xtream, catMap, onProgress) {
       await flushMovieBatch(pb, existingMap, batch, streamIds);
       count += batch.length;
       batch.length = 0;
+      checkCancelled(isCancelled);
       onProgress(`Syncing movies ${count}/${total}...`, 45 + Math.floor((count / total) * 30));
     }
   }
@@ -299,7 +333,7 @@ async function syncMovies(pb, sourceId, xtream, catMap, onProgress) {
     count += batch.length;
   }
 
-  // Mark unavailable
+  // Mark movies no longer on source as unavailable
   for (const m of existing) {
     if (!streamIds.has(m.stream_id) && m.available) {
       try {
@@ -328,7 +362,8 @@ async function flushMovieBatch(pb, existingMap, batch, streamIds) {
 /**
  * Sync series (without episodes — episodes fetched separately).
  */
-async function syncSeries(pb, sourceId, xtream, catMap, onProgress) {
+async function syncSeries(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
+  checkCancelled(isCancelled);
   let seriesList;
   try {
     seriesList = await xtream.getSeries();
@@ -337,6 +372,7 @@ async function syncSeries(pb, sourceId, xtream, catMap, onProgress) {
     return 0;
   }
 
+  checkCancelled(isCancelled);
   const existing = await pb.collection('series').getFullList({
     filter: `source_id="${sourceId}"`,
   });
@@ -392,7 +428,7 @@ async function syncSeries(pb, sourceId, xtream, catMap, onProgress) {
       } else {
         const record = await pb.collection('series').create(data);
         seriesIds.add(seriesId);
-        // Store PB record ID for episode fetching
+        // Add to map so we can find it for episode sync
         existingMap.set(seriesId, record);
       }
     } catch (err) {
@@ -403,29 +439,27 @@ async function syncSeries(pb, sourceId, xtream, catMap, onProgress) {
     onProgress(`Syncing series ${count}/${total}...`, 75 + Math.floor((count / total) * 20));
   }
 
-  // Fetch episodes for each series (limited to avoid overload)
+  // Episodes
   onProgress('Fetching episodes...', 95);
   let epCount = 0;
   const seriesArray = Array.from(seriesIds);
 
-  // Process in batches of 5 to avoid overwhelming the API
+  // Fetch episodes in small batches to avoid overwhelming the API
   for (let i = 0; i < seriesArray.length; i += 5) {
+    checkCancelled(isCancelled);
     const batch = seriesArray.slice(i, i + 5);
     await Promise.allSettled(batch.map(async (seriesId) => {
       try {
-        // Find the PB series record
         const pbSeries = await findSeriesByExternalId(pb, sourceId, seriesId);
         if (!pbSeries) return;
 
         const seriesInfo = await xtream.getSeriesInfo(seriesId);
         if (!seriesInfo || !seriesInfo.episodes) return;
 
-        // Upsert episodes
         for (const [seasonKey, episodes] of Object.entries(seriesInfo.episodes)) {
           const season = parseInt(seasonKey, 10);
           for (const ep of episodes) {
             try {
-              // Check if episode exists
               const existingEps = await pb.collection('series_episodes').getList(1, 1, {
                 filter: `series_id="${pbSeries.id}" && season=${season} && episode_num=${ep.episode_num}`,
               });

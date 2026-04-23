@@ -66,7 +66,31 @@ echo "→ Syncing deploy files..."
 rsync -avz --delete "$SCRIPT_DIR/deploy/" "$SSH_HOST:$REMOTE_BASE/deploy/"
 echo "✓ Deploy files synced"
 
-# 6. Verify deployment
+# 6. Install systemd services if not already installed
+ssh "$SSH_HOST" "
+cp $REMOTE_BASE/deploy/iptv-pb.service /etc/systemd/system/iptv-pb.service
+cp $REMOTE_BASE/deploy/iptv-worker.service /etc/systemd/system/iptv-worker.service
+systemctl daemon-reload
+systemctl enable iptv-pb.service iptv-worker.service
+"
+echo "✓ systemd services installed and enabled"
+
+# 7. Sync worker code
+echo "→ Syncing worker code..."
+rsync -avz --delete --exclude='node_modules' --exclude='.env' "$SCRIPT_DIR/worker/" "$SSH_HOST:$REMOTE_BASE/worker/"
+ssh "$SSH_HOST" "cd $REMOTE_BASE/worker && npm install --omit=dev --quiet 2>&1"
+echo "✓ Worker synced"
+
+# 8. Restart services
+ssh "$SSH_HOST" "
+systemctl restart iptv-pb.service
+sleep 2
+systemctl restart iptv-worker.service
+sleep 2
+"
+echo "✓ Services restarted"
+
+# 9. Verify deployment
 echo "→ Verifying..."
 FILES=$(ssh "$SSH_HOST" "ls $REMOTE_BASE/pb_public/assets/ 2>/dev/null | wc -l")
 echo "  Server pb_public/assets: $FILES files"

@@ -10,7 +10,8 @@ export class SyncEngine {
     this.concurrency = options.concurrency || 3;
     this.queue = [];
     this.activeWorkers = 0;
-    this.running = new Set(); // Set of sourceIds currently being processed
+    this.running = new Set();
+    this.cancelled = new Set();// Set of sourceIds currently being processed
     this.shuttingDown = false;
   }
 
@@ -19,6 +20,8 @@ export class SyncEngine {
    * Deduplicates — won't add if already queued or running.
    */
   enqueue(sourceId) {
+    // Don't re-queue if it was just cancelled — clear the flag
+    this.cancelled.delete(sourceId);
     if (this.running.has(sourceId)) {
       console.log(`[engine] Source ${sourceId} already being processed, skipping`);
       return;
@@ -31,6 +34,31 @@ export class SyncEngine {
     console.log(`[engine] Enqueued source ${sourceId} (queue size: ${this.queue.length})`);
     this.createSyncJobRecord(sourceId, 'queued');
     this.processQueue();
+  }
+
+  /**
+   * Cancel a running or queued sync for a source.
+   */
+  cancel(sourceId) {
+    // Remove from queue if still waiting
+    const queueIndex = this.queue.indexOf(sourceId);
+    if (queueIndex !== -1) {
+      this.queue.splice(queueIndex, 1);
+      console.log(`[engine] Removed source ${sourceId} from queue`);
+    }
+
+    // Mark as cancelled so running worker stops at next checkpoint
+    if (this.running.has(sourceId)) {
+      this.cancelled.add(sourceId);
+      console.log(`[engine] Marked running source ${sourceId} for cancellation`);
+    }
+
+    // Update the sync job record
+    this.updateSyncJob(sourceId, {
+      status: 'cancelled',
+      phase: 'Cancelled by user',
+      finished_at: new Date().toISOString(),
+    });
   }
 
   /**
@@ -53,9 +81,15 @@ export class SyncEngine {
 
     try {
       await this.updateSyncJob(sourceId, { status: 'running', phase: 'Starting sync...', progress: 0 });
+
+      // Pass a cancellation checker to syncSource
+      const isCancelled = () => this.cancelled.has(sourceId);
       await syncSource(this.pb, sourceId, (phase, progress) => {
         this.updateSyncJob(sourceId, { phase, progress });
-      });
+      }, isCancelled);
+
+      // Clear cancellation flag on success
+      this.cancelled.delete(sourceId);
 
       await this.updateSyncJob(sourceId, {
         status: 'completed',
@@ -73,6 +107,18 @@ export class SyncEngine {
 
       console.log(`[engine] Source ${sourceId} synced successfully`);
     } catch (err) {
+      // Handle cancellation — not an error
+      if (err && err.code === 'CANCELLED') {
+        this.cancelled.delete(sourceId);
+        await this.updateSyncJob(sourceId, {
+          status: 'cancelled',
+          phase: 'Cancelled by user',
+          finished_at: new Date().toISOString(),
+        });
+        console.log(`[engine] Source ${sourceId} cancelled by user`);
+        return;
+      }
+
       console.error(`[engine] Source ${sourceId} sync failed (attempt ${attempt}):`, err.message);
 
       if (attempt < maxRetries) {
@@ -102,7 +148,7 @@ export class SyncEngine {
     } finally {
       this.running.delete(sourceId);
       this.activeWorkers--;
-      this.processQueue(); // Process next in queue
+      this.processQueue();// Process next in queue
     }
   }
 

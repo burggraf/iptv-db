@@ -7,9 +7,9 @@ Type=simple
 User=root
 WorkingDirectory=/opt/iptv/worker
 ExecStart=/usr/bin/node /opt/iptv/worker/index.js
-Restart=on-failure
+Restart=always
 RestartSec=5
-Environment=POCKETBASE_URL=http://127.0.0.1:8090
+EnvironmentFile=/opt/iptv/.env
 
 [Install]
 WantedBy=multi-user.target

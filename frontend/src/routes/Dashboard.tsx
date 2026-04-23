@@ -146,6 +146,7 @@ function SyncStatusBadge({ status }: { status: string }) {
     running: 'default',
     completed: 'success',
     failed: 'destructive',
+    cancelled: 'outline',
   }[status] as 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
 
   return <Badge variant={variant}>{status}</Badge>;
