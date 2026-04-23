@@ -50,6 +50,11 @@ export default function ChannelDetailModal({ channelId, onClose }: ChannelDetail
     { label: 'TVG ID', value: channel?.tvg_id || '—' },
     { label: 'Country', value: channel?.tvg_country || '—' },
     { label: 'Added', value: channel?.added || '—' },
+    { label: 'Stream URL', value: source && channel?.stream_id ? (
+      <a href={`${source.base_url}/live/${source.username}/${source.password}/${channel.stream_id}.m3u8`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">
+        {source.base_url}/live/…/{channel.stream_id}.m3u8
+      </a>
+    ) : '—'},
     { label: 'Available', value: channel?.available ? <Badge variant="success">Yes</Badge> : <Badge variant="destructive">No</Badge> },
     { label: 'Source', value: source ? source.name : '—' },
     { label: 'Category', value: category ? category.name : '—' },
