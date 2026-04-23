@@ -118,8 +118,6 @@ async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress, is
     existingMap.set(`${type}_${cat.category_id}`, cat);
   }
 
-  const createdIds = new Set();
-
   for (const cat of categories) {
     const catId = cat.category_id;
     const name = cat.category_name || cat.name || `Category ${catId}`;
@@ -129,7 +127,6 @@ async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress, is
       if (existingMap.has(key)) {
         const existingCat = existingMap.get(key);
         catMap[key] = existingCat.id;
-        createdIds.add(existingCat.id);
       } else {
         const record = await pb.collection('categories').create({
           source_id: sourceId,
@@ -138,20 +135,37 @@ async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress, is
           name,
         });
         catMap[key] = record.id;
-        createdIds.add(record.id);
       }
     } catch (err) {
       console.warn(`[sync-job] Failed to upsert ${type} category "${name}":`, err.message);
     }
   }
 
-  // Delete categories no longer returned by the API
-  for (const existingCat of existing) {
-    if (!createdIds.has(existingCat.id)) {
-      try {
-        await pb.collection('categories').delete(existingCat.id);
-      } catch { /* skip */ }
-    }
+  // Delete categories no longer returned by the API.
+  // Skip deletion to avoid removing fallback categories created by syncChannels
+  // for orphan channels with unknown category IDs. Categories are cheap.
+}
+
+/**
+ * Ensure a category exists in catMap, creating it on-the-fly if needed.
+ * Used for channels that reference a category_id not in the API category list.
+ */
+async function ensureCategory(pb, sourceId, type, categoryId, catMap) {
+  const key = `${type}_${categoryId}`;
+  if (catMap[key]) return catMap[key];
+
+  try {
+    const record = await pb.collection('categories').create({
+      source_id: sourceId,
+      type,
+      category_id: categoryId,
+      name: `Category ${categoryId}`,
+    });
+    catMap[key] = record.id;
+    return record.id;
+  } catch (err) {
+    console.warn(`[sync-job] Failed to create fallback category ${key}:`, err.message);
+    return null;
   }
 }
 
@@ -190,7 +204,7 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
 
     const categoryId = stream.category_id;
     const catKey = `live_${categoryId}`;
-    const pbCategoryId = catMap[catKey];
+    const pbCategoryId = catMap[catKey] || await ensureCategory(pb, sourceId, 'live', categoryId, catMap);
     if (!pbCategoryId) continue;
 
     streamIds.add(streamId);
