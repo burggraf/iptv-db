@@ -201,10 +201,9 @@ export default function SourceDetail() {
 
       {/* Content counts */}
       <div className="flex flex-wrap gap-6 text-sm">
-        <span><span className="font-semibold">{liveCategories.length}</span> <span className="text-muted-foreground">Categories</span></span>
-        <span><span className="font-semibold">{channelCount}</span> <span className="text-muted-foreground">Channels</span></span>
-        <span><span className="font-semibold">{vodCount}</span> <span className="text-muted-foreground">Movies</span></span>
-        <span><span className="font-semibold">{seriesCount}</span> <span className="text-muted-foreground">Series</span></span>
+        <span><span className="font-semibold">{channelCount.toLocaleString()}</span> <span className="text-muted-foreground">Channels</span></span>
+        <span><span className="font-semibold">{vodCount.toLocaleString()}</span> <span className="text-muted-foreground">Movies</span></span>
+        <span><span className="font-semibold">{seriesCount.toLocaleString()}</span> <span className="text-muted-foreground">Series</span></span>
       </div>
 
       {/* Live channels */}
