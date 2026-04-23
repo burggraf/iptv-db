@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
 import { Settings } from 'lucide-react';
-import { pb } from './lib/pocketbase';
+import { pb } from '../lib/pocketbase';
 
 const navItems = [
   { to: '/app/dashboard', label: 'Dashboard', icon: '📊' },
