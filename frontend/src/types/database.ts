@@ -17,6 +17,9 @@ export interface Source extends RecordModel {
   sync_status: string;
   source_url: string;
   scraped_at: string;
+  channel_count: number;
+  movie_count: number;
+  series_count: number;
 }
 
 export interface Category extends RecordModel {
