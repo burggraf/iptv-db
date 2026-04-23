@@ -1,23 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router';
+import { Outlet, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings, Trash2, Globe, RefreshCw, X } from 'lucide-react';
+import { Settings, Trash2, Globe, RefreshCw, X, LogOut } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import type { SyncJob } from '../types/database';
-
-const navItems = [
-  { to: '/app/dashboard', label: 'Dashboard', icon: '📊' },
-  { to: '/app/sources', label: 'Sources', icon: '📡' },
-  { to: '/app/channels', label: 'Channels', icon: '📺' },
-  { to: '/app/movies', label: 'Movies', icon: '🎬' },
-  { to: '/app/series', label: 'Series', icon: '📼' },
-  { to: '/app/settings', label: 'Settings', icon: '⚙️' },
-];
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -30,13 +20,12 @@ export default function AppLayout() {
   const [scrapeError, setScrapeError] = useState('');
   const settingsRef = useRef<HTMLDivElement>(null);
 
-  // Source detail page context
+  // Source detail sync state (for when viewing /app/dashboard/:id)
   const sourceDetailMatch = location.pathname.match(/^\/app\/dashboard\/([a-z0-9]{15})$/);
   const currentSourceId = sourceDetailMatch?.[1] ?? null;
   const [sourceSyncing, setSourceSyncing] = useState(false);
   const [sourceSyncJob, setSourceSyncJob] = useState<SyncJob | null>(null);
 
-  // Poll sync jobs for current source
   useEffect(() => {
     if (!currentSourceId) {
       setSourceSyncJob(null);
@@ -157,112 +146,79 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <aside className={`flex flex-col border-r bg-card transition-all duration-200 ${sidebarOpen ? 'w-52' : 'w-16'}`}>
-        <div className="flex h-14 items-center border-b px-4">
-          {sidebarOpen && <span className="text-lg font-bold">IPTV DB</span>}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="ml-auto rounded p-1 hover:bg-muted"
-          >
-            {sidebarOpen ? '◀' : '▶'}
-          </button>
-        </div>
-        <nav className="flex-1 space-y-1 p-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`
-              }
+    <div className="flex h-screen flex-col bg-background">
+      {/* Top bar */}
+      <header className="flex h-14 shrink-0 items-center border-b bg-card px-6">
+        <h1 className="text-lg font-bold">IPTV DB</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{user?.email}</span>
+          <div className="relative" ref={settingsRef}>
+            <button
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Settings"
             >
-              <span className="text-base">{item.icon}</span>
-              {sidebarOpen && <span>{item.label}</span>}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="border-t p-2">
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <span className="text-base">🚪</span>
-            {sidebarOpen && <span>Logout</span>}
-          </button>
+              <Settings className="h-4 w-4" />
+            </button>
+            {settingsOpen && (
+              <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
+                <div className="py-1">
+                  {currentSourceId ? (
+                    <>
+                      {sourceSyncing ? (
+                        <button
+                          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                          onClick={handleCancelSync}
+                        >
+                          <X className="h-4 w-4" /> Cancel Sync
+                        </button>
+                      ) : (
+                        <button
+                          className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                          onClick={handleSyncSource}
+                        >
+                          <RefreshCw className="h-4 w-4" /> Sync
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setScrapeDialogOpen(true);
+                        }}
+                      >
+                        <Globe className="h-4 w-4" /> Scrape Sources
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete All Sources
+                      </button>
+                    </>
+                  )}
+                  <div className="my-1 border-t" />
+                  <button
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" /> Logout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </aside>
+      </header>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <header className="flex h-14 items-center border-b bg-card px-6">
-          <h1 className="text-sm font-medium text-muted-foreground">
-            {navItems.find((n) => location.pathname.startsWith(n.to))?.label || 'IPTV DB'}
-          </h1>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{user?.email}</span>
-            <div className="relative" ref={settingsRef}>
-              <button
-                onClick={() => setSettingsOpen(!settingsOpen)}
-                className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-              {settingsOpen && (
-                <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
-                  <div className="py-1">
-                    {currentSourceId ? (
-                      <>
-                        {sourceSyncing ? (
-                          <button
-                            className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                            onClick={handleCancelSync}
-                          >
-                            <X className="h-4 w-4" /> Cancel Sync
-                          </button>
-                        ) : (
-                          <button
-                            className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
-                            onClick={handleSyncSource}
-                          >
-                            <RefreshCw className="h-4 w-4" /> Sync
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
-                          onClick={() => {
-                            setSettingsOpen(false);
-                            setScrapeDialogOpen(true);
-                          }}
-                        >
-                          <Globe className="h-4 w-4" /> Scrape Sources
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                          onClick={() => {
-                            setSettingsOpen(false);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" /> Delete All Sources
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
         <div className="p-6">
           <Outlet />
         </div>
