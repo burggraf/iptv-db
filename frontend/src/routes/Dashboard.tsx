@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source } from '../types/database';
@@ -34,8 +34,6 @@ export default function Dashboard() {
   const [totalItems, setTotalItems] = useState(0);
 
   // Settings dropdown state
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
 
   // Delete all sources confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -127,16 +125,6 @@ export default function Dashboard() {
   }, [sources]);
 
   // Close dropdown on outside click
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setSettingsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [settingsOpen]);
 
   const handleRowClick = (source: Source) => {
     navigate(`/app/dashboard/${source.id}`);
@@ -196,47 +184,27 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Sources" value={stats.sources} loading={loading} />
-        <StatCard label="Channels" value={stats.channels} loading={loading} />
-        <StatCard label="Movies" value={stats.movies} loading={loading} />
-        <StatCard label="Series" value={stats.series} loading={loading} />
-        <StatCard label="Episodes" value={stats.episodes} loading={loading} />
-      </div>
+    <div className="space-y-4">
+      {/* Stats summary */}
+      {!loading && (
+        <p className="text-sm text-muted-foreground">
+          {stats.sources.toLocaleString()} source{stats.sources !== 1 ? 's' : ''} · {stats.channels.toLocaleString()} channels · {stats.movies.toLocaleString()} movies · {stats.series.toLocaleString()} series · {stats.episodes.toLocaleString()} episodes
+        </p>
+      )}
 
       {/* Sources list */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Sources</CardTitle>
-
-            {/* Settings dropdown */}
-            <div className="relative" ref={settingsRef}>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSettingsOpen(!settingsOpen)}
-              >
-                ⚙️ Settings
-              </Button>
-              {settingsOpen && (
-                <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
-                  <div className="py-1">
-                    <button
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      🗑️ Delete All Sources
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              🗑️ Delete All
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -287,17 +255,17 @@ export default function Dashboard() {
                     >
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
-                      <TableCell className="max-w-[200px] truncate text-muted-foreground">{s.base_url || '—'}</TableCell>
+                      <TableCell className="max-w-[200px] truncate text-muted-foreground">{s.base_url || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'active' ? 'success' : s.status === 'error' ? 'destructive' : 'secondary'}>
                           {s.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{s.max_connections ?? '—'}</TableCell>
+                      <TableCell>{s.max_connections ?? '-'}</TableCell>
                       <TableCell>{formatDateTime(s.expiry_date)}</TableCell>
-                      <TableCell>{counts[s.id]?.channels ?? '—'}</TableCell>
-                      <TableCell>{counts[s.id]?.movies ?? '—'}</TableCell>
-                      <TableCell>{counts[s.id]?.series ?? '—'}</TableCell>
+                      <TableCell>{counts[s.id]?.channels ?? '-'}</TableCell>
+                      <TableCell>{counts[s.id]?.movies ?? '-'}</TableCell>
+                      <TableCell>{counts[s.id]?.series ?? '-'}</TableCell>
                       <TableCell>{formatDateTime(s.last_sync)}</TableCell>
                     </TableRow>
                   ))
@@ -355,15 +323,3 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, loading }: { label: string; value: number; loading: boolean }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{loading ? '—' : value.toLocaleString()}</div>
-      </CardContent>
-    </Card>
-  );
-}

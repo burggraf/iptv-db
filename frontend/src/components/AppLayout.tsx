@@ -72,6 +72,13 @@ export default function AppLayout() {
           </h1>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
+            <button
+              onClick={() => navigate('/app/settings')}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Settings"
+            >
+              ⚙️
+            </button>
           </div>
         </header>
         <div className="p-6">
