@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { pb } from '../lib/pocketbase';
+import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source, SyncJob } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -42,6 +42,7 @@ export default function Settings() {
       const res = await pb.collection('sources').getFullList<Source>({ sort: '-created' });
       setSources(res);
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error(err);
     }
   };
@@ -57,7 +58,10 @@ export default function Settings() {
         map[job.source_id] = job;
       }
       setActiveJobs(map);
-    } catch { /* skip */ }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      /* skip */
+    }
   };
 
   const handleScrape = async () => {

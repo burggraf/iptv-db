@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { pb } from '../lib/pocketbase';
+import { pb, pbCall, isAbortError } from '../lib/pocketbase';
 import type { Source, SyncJob } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -48,7 +48,7 @@ export default function Dashboard() {
           setRecentJobs(jobsRes.items);
         }
       } catch (err) {
-        console.error('Dashboard load error:', err);
+        if (!isAbortError(err)) console.error('Dashboard load error:', err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -59,12 +59,16 @@ export default function Dashboard() {
 
   // Subscribe to sync job updates
   useEffect(() => {
-    const unsub = pb.collection('sync_jobs').subscribe('*', (e) => {
-      // Refresh recent jobs on any sync job change
-      pb.collection('sync_jobs').getList(1, 10, {
-        sort: '-created',
-        expand: 'source_id',
-      }).then((res) => setRecentJobs(res.items));
+    const unsub = pb.collection('sync_jobs').subscribe('*', () => {
+      // Refresh recent jobs on any sync job change; abort errors are silently ignored
+      pbCall(() =>
+        pb.collection('sync_jobs').getList(1, 10, {
+          sort: '-created',
+          expand: 'source_id',
+        })
+      ).then((res) => {
+        if (res) setRecentJobs(res.items);
+      }).catch(() => { /* non-abort errors suppressed for realtime updates */ });
     });
     return () => { unsub.then((u) => u()); };
   }, []);

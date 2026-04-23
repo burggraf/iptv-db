@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type PocketBase from 'pocketbase';
+import { isAbortError } from '../lib/pocketbase';
 import {
   Table,
   TableHeader,
@@ -89,7 +90,7 @@ export default function PaginatedTable<T extends { id: string }>({
           setTotalItems(result.totalItems);
         }
       } catch (err) {
-        console.error('Failed to fetch', collection, err);
+        if (!isAbortError(err)) console.error('Failed to fetch', collection, err);
       } finally {
         if (!cancelled) setLoading(false);
       }

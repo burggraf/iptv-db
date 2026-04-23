@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { pb } from '../lib/pocketbase';
+import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source, Category, Channel, Movie, Series } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -58,7 +58,7 @@ export default function SourceDetail() {
           setSeriesCategories(seriesCatsData.items as Category[]);
         }
       } catch (err) {
-        console.error(err);
+        if (!isAbortError(err)) console.error(err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -80,7 +80,10 @@ export default function SourceDetail() {
           sort: 'name',
         });
         if (!cancelled) setLiveChannels(res.items);
-      } catch { /* skip */ }
+      } catch (err) {
+        if (isAbortError(err)) return;
+        /* skip */
+      }
     };
     load();
     return () => { cancelled = true; };
@@ -99,7 +102,10 @@ export default function SourceDetail() {
           sort: 'name',
         });
         if (!cancelled) setMovies(res.items);
-      } catch { /* skip */ }
+      } catch (err) {
+        if (isAbortError(err)) return;
+        /* skip */
+      }
     };
     load();
     return () => { cancelled = true; };
@@ -118,7 +124,10 @@ export default function SourceDetail() {
           sort: 'name',
         });
         if (!cancelled) setSeriesData(res.items);
-      } catch { /* skip */ }
+      } catch (err) {
+        if (isAbortError(err)) return;
+        /* skip */
+      }
     };
     load();
     return () => { cancelled = true; };

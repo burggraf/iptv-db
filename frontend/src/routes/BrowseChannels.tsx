@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router';
-import { pb } from '../lib/pocketbase';
+import { pb, isAbortError } from '../lib/pocketbase';
 import type { Category, Channel, Source } from '../types/database';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -40,7 +40,7 @@ export default function BrowseChannels() {
           setSources(srcs);
         }
       } catch (err) {
-        console.error(err);
+        if (!isAbortError(err)) console.error(err);
       }
     };
     load();
@@ -77,7 +77,7 @@ export default function BrowseChannels() {
           setChannelSources(srcMap);
         }
       } catch (err) {
-        console.error(err);
+        if (!isAbortError(err)) console.error(err);
       } finally {
         if (!cancelled) setLoading(false);
       }
