@@ -149,10 +149,42 @@ async function syncCategories(pb, sourceId, type, xtream, catMap, onProgress, is
 /**
  * Ensure a category exists in catMap, creating it on-the-fly if needed.
  * Used for channels that reference a category_id not in the API category list.
+ * Checks the DB before creating to handle re-syncs where the category already exists.
+ * Uses a pending-cache to avoid duplicate lookups/creates from concurrent channels.
  */
+const _pendingCategoryPromises = new Map();
+
 async function ensureCategory(pb, sourceId, type, categoryId, catMap) {
   const key = `${type}_${categoryId}`;
   if (catMap[key]) return catMap[key];
+
+  // Deduplicate concurrent lookups for the same key.
+  if (_pendingCategoryPromises.has(key)) {
+    return _pendingCategoryPromises.get(key);
+  }
+
+  const promise = _resolveCategory(pb, sourceId, type, categoryId, catMap, key);
+  _pendingCategoryPromises.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    _pendingCategoryPromises.delete(key);
+  }
+}
+
+async function _resolveCategory(pb, sourceId, type, categoryId, catMap, key) {
+  // Check if it already exists in the DB (from a previous sync).
+  try {
+    const existing = await pb.collection('categories').getList(1, 1, {
+      filter: `source_id="${sourceId}" && type="${type}" && category_id=${categoryId}`,
+    });
+    if (existing.items.length > 0) {
+      catMap[key] = existing.items[0].id;
+      return existing.items[0].id;
+    }
+  } catch {
+    // DB lookup failed — try to create below.
+  }
 
   try {
     const record = await pb.collection('categories').create({
