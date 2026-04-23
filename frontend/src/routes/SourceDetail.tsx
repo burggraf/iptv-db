@@ -210,7 +210,7 @@ export default function SourceDetail() {
       {/* Live channels */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <CardTitle>Live Channels</CardTitle>
             <Input
               placeholder="Search..."
@@ -218,10 +218,6 @@ export default function SourceDetail() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-48"
             />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
             <Select
               value={selectedLiveCat}
               onChange={(e) => setSelectedLiveCat(e.target.value)}
@@ -233,6 +229,8 @@ export default function SourceDetail() {
               ))}
             </Select>
           </div>
+        </CardHeader>
+        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
