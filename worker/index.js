@@ -82,10 +82,6 @@ async function handleScrape(req, res) {
   try {
     console.log(`[worker] Scraping: ${url}`);
     const result = await scrape(pb, url);
-    // Queue new/updated sources for sync
-    for (const sourceId of result.sourceIds) {
-      syncEngine.enqueue(sourceId);
-    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
   } catch (err) {
