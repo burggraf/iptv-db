@@ -43,7 +43,7 @@ export async function scrape(pb, url) {
     if (existing) {
       // Update existing
       await pb.collection('sources').update(existing.id, {
-        status: 'active',
+        status: 'pending',
         source_url: url,
         scraped_at: new Date().toISOString(),
       });
@@ -53,7 +53,7 @@ export async function scrape(pb, url) {
       // Create new
       const record = await pb.collection('sources').create({
         ...source,
-        status: 'active',
+        status: 'pending',
         source_url: url,
         scraped_at: new Date().toISOString(),
       });

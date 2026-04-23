@@ -12,7 +12,7 @@ export interface Source extends RecordModel {
   m3u_url: string;
   max_connections: number;
   expiry_date: string;
-  status: 'active' | 'expired' | 'error';
+  status: 'active' | 'expired' | 'error' | 'pending';
   last_sync: string;
   sync_status: string;
   source_url: string;

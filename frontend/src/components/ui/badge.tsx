@@ -1,7 +1,7 @@
 import { type HTMLAttributes, forwardRef } from 'react';
 import { cn } from '../../lib/utils';
 
-const Badge = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' }>(
+const Badge = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' }>(
   ({ className, variant = 'default', ...props }, ref) => {
     return (
       <div
@@ -14,6 +14,7 @@ const Badge = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { vari
             'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80': variant === 'destructive',
             'text-foreground': variant === 'outline',
             'border-transparent bg-green-600 text-white shadow hover:bg-green-600/80': variant === 'success',
+            'border-transparent bg-yellow-500 text-black shadow hover:bg-yellow-500/80': variant === 'warning',
           },
           className,
         )}

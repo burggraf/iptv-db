@@ -184,7 +184,7 @@ export default function Dashboard() {
                       <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
                       <TableCell className="max-w-[200px] truncate text-muted-foreground">{s.base_url || '-'}</TableCell>
                       <TableCell>
-                        <Badge variant={s.status === 'active' ? 'success' : s.status === 'error' ? 'destructive' : 'secondary'}>
+                        <Badge variant={s.status === 'active' ? 'success' : s.status === 'pending' ? 'warning' : s.status === 'error' ? 'destructive' : 'secondary'}>
                           {s.status}
                         </Badge>
                       </TableCell>
