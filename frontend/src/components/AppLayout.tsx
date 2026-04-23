@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings } from 'lucide-react';
+import { Settings, Trash2, Globe } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 
 const navItems = [
@@ -21,6 +21,12 @@ export default function AppLayout() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  const [scrapeDialogOpen, setScrapeDialogOpen] = useState(false);
+  const [scrapeUrl, setScrapeUrl] = useState('');
+  const [scraping, setScraping] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<{ added: number; updated: number } | null>(null);
+  const [scrapeError, setScrapeError] = useState('');
   const settingsRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = () => {
@@ -65,6 +71,30 @@ export default function AppLayout() {
     setDeleteDialogOpen(false);
     setSettingsOpen(false);
     window.location.reload();
+  };
+
+  const handleScrape = async () => {
+    if (!scrapeUrl.trim()) return;
+    setScraping(true);
+    setScrapeResult(null);
+    setScrapeError('');
+    try {
+      const res = await fetch('/worker/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: scrapeUrl.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Scrape failed');
+      }
+      const data = await res.json();
+      setScrapeResult({ added: data.added || 0, updated: data.updated || 0 });
+    } catch (err: unknown) {
+      setScrapeError(err instanceof Error ? err.message : 'Scrape failed');
+    } finally {
+      setScraping(false);
+    }
   };
 
   return (
@@ -129,13 +159,22 @@ export default function AppLayout() {
                 <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
                   <div className="py-1">
                     <button
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setScrapeDialogOpen(true);
+                      }}
+                    >
+                      <Globe className="h-4 w-4" /> Scrape Sources
+                    </button>
+                    <button
                       className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
                       onClick={() => {
                         setSettingsOpen(false);
                         setDeleteDialogOpen(true);
                       }}
                     >
-                      🗑️ Delete All Sources
+                      <Trash2 className="h-4 w-4" /> Delete All Sources
                     </button>
                   </div>
                 </div>
@@ -179,6 +218,74 @@ export default function AppLayout() {
                 {deleting ? 'Deleting...' : 'Delete Everything'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scrape Sources dialog */}
+      {scrapeDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !scraping && setScrapeDialogOpen(false)}>
+          <div className="relative z-50 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold">Scrape Sources</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Paste a blog URL containing Xtream accounts or M3U links to scrape new sources.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                placeholder="https://example.com/blog-post"
+                value={scrapeUrl}
+                onChange={(e) => setScrapeUrl(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={scraping}
+              />
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 disabled:opacity-50"
+                onClick={handleScrape}
+                disabled={scraping || !scrapeUrl.trim()}
+              >
+                {scraping ? 'Scraping...' : 'Scrape'}
+              </button>
+            </div>
+            {scraping && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <p className="text-sm text-muted-foreground">Scraping sources, this may take a moment...</p>
+                </div>
+              </div>
+            )}
+            {scrapeResult && (
+              <div className="mt-3 space-y-3">
+                <p className="text-sm text-green-600">
+                  ✓ Added {scrapeResult.added} source{scrapeResult.added !== 1 ? 's' : ''}, updated {scrapeResult.updated}.
+                </p>
+                <button
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
+                  onClick={() => {
+                    setScrapeDialogOpen(false);
+                    setScrapeUrl('');
+                    setScrapeResult(null);
+                    window.location.reload();
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            )}
+            {scrapeError && (
+              <p className="mt-2 text-sm text-destructive">{scrapeError}</p>
+            )}
+            {!scraping && !scrapeResult && (
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 border"
+                  onClick={() => setScrapeDialogOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
