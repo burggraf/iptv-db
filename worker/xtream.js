@@ -164,17 +164,45 @@ export class XtreamClient {
   }
 
   /**
-   * Get full live streams list with category grouping.
-   * Falls back to per-category fetching if full list fails.
+   * Get full live streams list.
+   * First tries fetching all streams at once. If that fails or returns empty,
+   * falls back to fetching per-category (for slow Xtream servers).
+   * @param {string[]} [categoryIds] - Xtream category IDs for fallback
+   * @param {function} [onProgress] - Optional progress callback (phase, percent)
    */
-  async getAllLiveStreams() {
+  async getAllLiveStreams(categoryIds = [], onProgress = null) {
     try {
       const streams = await this.getLiveStreams();
       if (streams.length > 0) return streams;
-    } catch {
-      // Fall through to per-category fetch
+    } catch (err) {
+      console.log(`[xtream] Full live streams fetch failed: ${err.message}, trying per-category`);
     }
-    return [];
+
+    // Fallback: fetch streams per-category with concurrency
+    if (categoryIds.length === 0) return [];
+
+    const CONCURRENCY = 10;
+    const allStreams = [];
+    const total = categoryIds.length;
+    let completed = 0;
+
+    for (let i = 0; i < total; i += CONCURRENCY) {
+      const batch = categoryIds.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(catId => this.getLiveStreams(catId))
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          allStreams.push(...result.value);
+        }
+      }
+      completed += batch.length;
+      if (onProgress) {
+        onProgress(`Fetching live streams ${completed}/${total}...`, 15 + Math.floor((completed / total) * 25));
+      }
+    }
+    console.log(`[xtream] Per-category fetch: ${allStreams.length} streams from ${total} categories`);
+    return allStreams;
   }
 
   /**

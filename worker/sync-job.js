@@ -212,9 +212,14 @@ async function _resolveCategory(pb, sourceId, type, categoryId, catMap, key) {
  */
 async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
   checkCancelled(isCancelled);
+  // Extract Xtream live category IDs from catMap keys (format: "live_<categoryId>")
+  const liveCategoryIds = Object.keys(catMap)
+    .filter(k => k.startsWith('live_'))
+    .map(k => k.replace('live_', ''));
+
   let streams;
   try {
-    streams = await xtream.getAllLiveStreams();
+    streams = await xtream.getAllLiveStreams(liveCategoryIds, onProgress);
   } catch (err) {
     console.warn(`[sync-job] Failed to fetch live streams:`, err.message);
     return 0;
