@@ -1,9 +1,4 @@
-// pb_hooks/cascade_delete.pb.js
-// POST /api/cascade-delete — delete all sources and related data
-// Requires authenticated user (admin or regular user with record permissions)
-
 routerAdd("POST", "/api/cascade-delete", (e) => {
-    // Check if specific source_ids provided (selective delete) vs delete-all
     let sourceIds = null;
     try {
         const body = e.bodyJson() || {};
@@ -12,62 +7,30 @@ routerAdd("POST", "/api/cascade-delete", (e) => {
         }
     } catch { /* no body, delete all */ }
 
-    const collections = [
-        "series_episodes",
-        "channels",
-        "movies",
-        "series",
-        "categories",
-        "sync_jobs",
-        "sources",
-    ];
-
-    const deleted = {};
-
-    for (let i = 0; i < collections.length; i++) {
-        const collectionName = collections[i];
-        const collection = $app.findCollectionByNameOrId(collectionName);
-        if (!collection) {
-            return e.json(500, { "message": "Collection not found: " + collectionName });
-        }
-
-        let records;
-        if (sourceIds && collectionName !== "sources") {
-            // Filter related records by source_id
-            const allRecords = $app.findAllRecords(collection);
-            records = [];
-            for (let k = 0; k < allRecords.length; k++) {
-                const rec = allRecords[k];
-                const srcId = rec.getStringValue ? rec.getStringValue("source_id") : (rec.source_id || "");
-                if (sourceIds.indexOf(srcId) !== -1) {
-                    records.push(rec);
-                }
-            }
-        } else if (sourceIds) {
-            // sources collection: only delete matching IDs
-            const allRecords = $app.findAllRecords(collection);
-            records = [];
-            for (let k = 0; k < allRecords.length; k++) {
-                if (sourceIds.indexOf(allRecords[k].id) !== -1) {
-                    records.push(allRecords[k]);
-                }
-            }
-        } else {
-            // delete-all mode
-            records = $app.findAllRecords(collection);
-        }
-
-        let count = 0;
-        for (let j = 0; j < records.length; j++) {
-            $app.delete(records[j]);
-            count++;
-        }
-        deleted[collectionName] = count;
+    const collection = $app.findCollectionByNameOrId("sources");
+    if (!collection) {
+        return e.json(500, { "message": "sources collection not found" });
     }
 
-    const msg = sourceIds ? `Deleted ${sourceIds.length} source(s) and related data` : "All sources and related data deleted";
-    return e.json(200, {
-        "message": msg,
-        "deleted": deleted
-    });
+    if (sourceIds) {
+        for (let i = 0; i < sourceIds.length; i++) {
+            const record = $app.findRecordById("sources", sourceIds[i]);
+            if (record) {
+                $app.delete(record);
+            }
+        }
+        return e.json(200, {
+            "message": "Deleted " + sourceIds.length + " source(s) and related data",
+            "deleted": { "sources": sourceIds.length }
+        });
+    } else {
+        const allSources = $app.findAllRecords(collection);
+        for (let i = 0; i < allSources.length; i++) {
+            $app.delete(allSources[i]);
+        }
+        return e.json(200, {
+            "message": "All sources and related data deleted",
+            "deleted": { "sources": allSources.length }
+        });
+    }
 });
