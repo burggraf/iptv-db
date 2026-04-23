@@ -59,6 +59,14 @@ export class XtreamClient {
    */
   async getUserInfo() {
     const data = await this.request('');
+
+    const extractServerUrl = (si) => {
+      if (!si?.url) return null;
+      const proto = si.https_port ? 'https' : 'http';
+      const port = si.https_port || si.port;
+      return `${proto}://${si.url}:${port}`;
+    };
+
     if (data.user_info) {
       return {
         status: data.user_info.status,
@@ -70,6 +78,7 @@ export class XtreamClient {
         allowedOutput: data.user_info.allowed_output_formats,
         message: data.user_info.message,
         auth: data.user_info.auth,
+        serverUrl: extractServerUrl(data.server_info),
       };
     }
     // Some servers return auth info at top level
@@ -82,6 +91,7 @@ export class XtreamClient {
         maxConnections: parseInt(data.auth.max_connections || '1', 10),
         activeConnections: 0,
         message: '',
+        serverUrl: extractServerUrl(data.server_info),
       };
     }
     throw new Error('Invalid API response: no user_info found');

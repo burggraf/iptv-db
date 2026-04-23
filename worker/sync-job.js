@@ -44,11 +44,16 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
     throw new Error(`Authentication failed: ${err.message}`);
   }
 
-  await pb.collection('sources').update(sourceId, {
+  const sourceUpdates = {
     max_connections: userInfo.maxConnections,
     expiry_date: userInfo.expiry,
     status: userInfo.status === 'Active' ? 'active' : 'expired',
-  });
+  };
+  if (userInfo.serverUrl && userInfo.serverUrl !== source.base_url) {
+    console.log(`[sync-job] Correcting base_url from ${source.base_url} to ${userInfo.serverUrl}`);
+    sourceUpdates.base_url = userInfo.serverUrl;
+  }
+  await pb.collection('sources').update(sourceId, sourceUpdates);
 
   if (userInfo.status !== 'Active') {
     throw new Error(`Account status: ${userInfo.status}`);
