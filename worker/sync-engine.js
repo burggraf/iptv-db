@@ -228,6 +228,41 @@ export class SyncEngine {
     return this.queue.length;
   }
 
+  /**
+   * Cancel ALL running and queued sync jobs.
+   */
+  async cancelAll() {
+    console.log(`[engine] Cancelling all sync jobs (queue: ${this.queue.length}, running: ${this.running.size})`);
+    this.queue = [];
+    const toCancel = [...this.running];
+    this.running.clear();
+    this.activeWorkers = 0;
+    for (const sourceId of toCancel) {
+      this.cancelled.add(sourceId);
+    }
+    await this.cancelSyncJob('*');
+  }
+
+  /**
+   * Enqueue all sources with a given status filter.
+   */
+  async enqueueByFilter(filter) {
+    const sources = await this.pb.collection('sources').getFullList({
+      filter,
+      fields: 'id',
+    });
+    let enqueued = 0;
+    for (const s of sources) {
+      if (!this.running.has(s.id) && !this.queue.includes(s.id)) {
+        this.queue.push(s.id);
+        enqueued++;
+      }
+    }
+    console.log(`[engine] Enqueued ${enqueued} sources (queue size: ${this.queue.length})`);
+    this.processQueue();
+    return enqueued;
+  }
+
   shutdown() {
     this.shuttingDown = true;
     this.queue = [];

@@ -50,6 +50,10 @@ const server = http.createServer(async (req, res) => {
     await handleSync(req, res);
   } else if (req.method === 'POST' && url.pathname.startsWith('/api/sync/')) {
     await handleSyncCancel(req, res, url);
+  } else if (req.method === 'POST' && url.pathname === '/api/sync-all') {
+    await handleSyncAll(req, res);
+  } else if (req.method === 'POST' && url.pathname === '/api/cancel-all') {
+    await handleCancelAll(req, res);
   } else if (req.method === 'GET' && url.pathname === '/api/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -137,6 +141,28 @@ async function handleSyncCancel(req, res, url) {
     await syncEngine.cancel(sourceId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ cancelled: true, source_id: sourceId }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(err.message);
+  }
+}
+
+async function handleCancelAll(req, res) {
+  try {
+    await syncEngine.cancelAll();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ cancelled: true }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(err.message);
+  }
+}
+
+async function handleSyncAll(req, res) {
+  try {
+    const count = await syncEngine.enqueueByFilter('status="pending"');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ enqueued: count }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'text/plain' });
     res.end(err.message);

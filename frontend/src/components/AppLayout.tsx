@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings, Trash2, Globe, RefreshCw, X, LogOut } from 'lucide-react';
+import { Settings, Trash2, Globe, RefreshCw, X, LogOut, ListStart, Square } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import type { SyncJob } from '../types/database';
 
@@ -19,6 +19,8 @@ export default function AppLayout() {
   const [scrapeResult, setScrapeResult] = useState<{ added: number; updated: number } | null>(null);
   const [scrapeError, setScrapeError] = useState('');
   const settingsRef = useRef<HTMLDivElement>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [cancellingAll, setCancellingAll] = useState(false);
 
   // Source detail sync state (for when viewing /app/dashboard/:id)
   const sourceDetailMatch = location.pathname.match(/^\/app\/dashboard\/([a-z0-9]{15})$/);
@@ -74,6 +76,32 @@ export default function AppLayout() {
       await fetch(`/worker/api/sync/${currentSourceId}/cancel`, { method: 'POST' });
     } catch (err) {
       console.error('Cancel sync failed:', err);
+    }
+  };
+
+  const handleSyncAllPending = async () => {
+    setSettingsOpen(false);
+    setSyncingAll(true);
+    try {
+      const res = await fetch('/worker/api/sync-all', { method: 'POST' });
+      const data = await res.json();
+      console.log(`[sync-all] Enqueued ${data.enqueued} sources`);
+    } catch (err) {
+      console.error('Sync all failed:', err);
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  const handleCancelAllSyncs = async () => {
+    setSettingsOpen(false);
+    setCancellingAll(true);
+    try {
+      await fetch('/worker/api/cancel-all', { method: 'POST' });
+    } catch (err) {
+      console.error('Cancel all failed:', err);
+    } finally {
+      setCancellingAll(false);
     }
   };
 
@@ -183,6 +211,21 @@ export default function AppLayout() {
                     </>
                   ) : (
                     <>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-50"
+                        onClick={handleSyncAllPending}
+                        disabled={syncingAll}
+                      >
+                        <ListStart className="h-4 w-4" /> {syncingAll ? 'Syncing...' : 'Sync All Pending'}
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                        onClick={handleCancelAllSyncs}
+                        disabled={cancellingAll}
+                      >
+                        <Square className="h-4 w-4" /> {cancellingAll ? 'Cancelling...' : 'Cancel All Syncs'}
+                      </button>
+                      <div className="my-1 border-t" />
                       <button
                         className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
                         onClick={() => {

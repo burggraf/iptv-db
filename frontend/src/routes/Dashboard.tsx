@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source, SyncJob } from '../types/database';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,6 +10,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
 import { formatDateTime } from '../lib/utils';
+import { ChevronDown, Trash2, RefreshCw } from 'lucide-react';
 
 const PAGE_SIZE = 100;
 const WORKER_BASE = '/worker';
@@ -31,9 +32,38 @@ export default function Dashboard() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
-  // Sync status state
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [activeJobs, setActiveJobs] = useState<Record<string, SyncJob>>({});
+
+  // Checkbox selection
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const toggleCheck = (id: string) => {
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    setChecked(prev => prev.size === sources.length ? new Set() : new Set(sources.map(s => s.id)));
+  };
+
+  // Bulk action menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  // Delete confirmation
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingChecked, setDeletingChecked] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +101,7 @@ export default function Dashboard() {
       try {
         let filter = '1=1';
         if (search) {
-          filter = `name ~ "${search}" || base_url ~ "${search}"`;
+          filter = `name ~ "${search}"`;
         }
         const res = await pb.collection('sources').getList<Source>(page, PAGE_SIZE, {
           filter,
@@ -113,10 +143,9 @@ export default function Dashboard() {
       if (!cancelled) setCounts(newCounts);
     };
     loadCounts();
-    return () => { cancelled = true; };
+    return () => { cancelled = true };
   }, [sources]);
 
-  // --- Sync status: load active jobs + realtime subscription ---
   const loadActiveJobs = async () => {
     try {
       const jobs = await pb.collection('sync_jobs').getFullList<SyncJob>({
@@ -155,29 +184,46 @@ export default function Dashboard() {
     }
   };
 
-  const handleSyncAll = async () => {
-    for (const s of sources.filter((s) => s.status !== 'error')) {
-      handleSync(s.id);
+  const handleSyncChecked = () => {
+    setMenuOpen(false);
+    for (const id of checked) {
+      handleSync(id);
+    }
+  };
+
+  const handleDeleteChecked = async () => {
+    setDeleteOpen(false);
+    setDeletingChecked(true);
+    setDeleteError('');
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      const res = await fetch('/api/cascade-delete', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ source_ids: [...checked] }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Server error: ${res.status}`);
+      }
+      setChecked(new Set());
+      // reload
+      setSources(prev => prev.filter(s => !checked.has(s.id)));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingChecked(false);
     }
   };
 
   const handleCancel = async (sourceId: string) => {
     setSyncing((prev) => ({ ...prev, [sourceId]: false }));
     try {
-      await fetch(`${WORKER_BASE}/api/sync/${sourceId}/cancel`, {
-        method: 'POST',
-      });
+      await fetch(`${WORKER_BASE}/api/sync/${sourceId}/cancel`, { method: 'POST' });
       loadActiveJobs();
     } catch (err) {
       console.error('Cancel failed:', err);
-    }
-  };
-
-  const handleCancelAll = async () => {
-    for (const s of sources) {
-      if (activeJobs[s.id] || syncing[s.id]) {
-        handleCancel(s.id);
-      }
     }
   };
 
@@ -196,92 +242,40 @@ export default function Dashboard() {
         </p>
       )}
 
-      {/* Sync status - only shown when sources are actively syncing */}
-      {hasActiveSyncs && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Sync Status</CardTitle>
-              <CardDescription>Active sync jobs across all sources.</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              {(() => {
-                const runningCount = sources.filter(s => activeJobs[s.id] || syncing[s.id]).length;
-                return runningCount > 0 ? (
-                  <Button variant="outline" size="sm" onClick={handleCancelAll}>
-                    Cancel All ({runningCount})
-                  </Button>
-                ) : null;
-              })()}
-              <Button size="sm" onClick={handleSyncAll} disabled={sources.length === 0}>
-                Sync All
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Sync</TableHead>
-                  <TableHead>Sync Progress</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sources.filter(s => activeJobs[s.id] || syncing[s.id]).map((s) => {
-                  const job = activeJobs[s.id];
-                  return (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
-                      <TableCell>
-                        <Badge variant={s.status === 'active' ? 'success' : s.status === 'error' ? 'destructive' : 'secondary'}>
-                          {s.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{formatDateTime(s.last_sync)}</TableCell>
-                      <TableCell className="text-sm">
-                        {job ? (
-                          <div className="w-40">
-                            <span className="text-xs text-muted-foreground">{job.phase}</span>
-                            <div className="h-1.5 mt-1 w-full overflow-hidden rounded-full bg-secondary">
-                              <div
-                                className="h-full bg-primary transition-all"
-                                style={{ width: `${job.progress || 0}%` }}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Starting...</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-destructive hover:bg-destructive/10"
-                          onClick={() => handleCancel(s.id)}
-                        >
-                          Cancel
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Sources list */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Sources</CardTitle>
+            {checked.size > 0 && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  {checked.size} selected
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-52 rounded-md border bg-card shadow-lg z-50">
+                    <div className="py-1">
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={handleSyncChecked}
+                      >
+                        <RefreshCw className="h-4 w-4" /> Sync Selected
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={() => { setMenuOpen(false); setDeleteOpen(true); }}
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete Selected
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -302,9 +296,16 @@ export default function Dashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={sources.length > 0 && checked.size === sources.length}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-input cursor-pointer accent-primary"
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Base URL</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Connections</TableHead>
                   <TableHead>Expiry</TableHead>
@@ -330,9 +331,16 @@ export default function Dashboard() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => handleRowClick(s)}
                     >
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked.has(s.id)}
+                          onChange={() => toggleCheck(s.id)}
+                          className="h-4 w-4 rounded border-input cursor-pointer accent-primary"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
-                      <TableCell className="max-w-[200px] truncate text-muted-foreground">{s.base_url || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'active' ? 'success' : s.status === 'pending' ? 'warning' : s.status === 'error' ? 'destructive' : 'secondary'}>
                           {s.status}
@@ -369,6 +377,37 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !deletingChecked && setDeleteOpen(false)}>
+          <div className="relative z-50 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold">Delete {checked.size} source{checked.size !== 1 ? 's' : ''}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete the selected sources and all their related data
+              (channels, movies, series, categories, sync jobs).
+            </p>
+            <p className="mt-3 text-sm font-medium text-destructive">This action cannot be undone.</p>
+            {deleteError && <p className="mt-2 text-sm text-destructive">{deleteError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 border"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deletingChecked}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
+                onClick={handleDeleteChecked}
+                disabled={deletingChecked}
+              >
+                {deletingChecked ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
