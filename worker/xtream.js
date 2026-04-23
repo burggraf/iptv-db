@@ -62,9 +62,8 @@ export class XtreamClient {
 
     const extractServerUrl = (si) => {
       if (!si?.url) return null;
-      const proto = si.https_port ? 'https' : 'http';
-      const port = si.https_port || si.port;
-      return `${proto}://${si.url}:${port}`;
+      const port = si.port;
+      return `http://${si.url}:${port}`;
     };
 
     if (data.user_info) {
