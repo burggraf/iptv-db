@@ -17,6 +17,7 @@ export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
   const [source, setSource] = useState<Source | null>(null);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
+  const [channelCount, setChannelCount] = useState(0);
   const [vodCount, setVodCount] = useState(0);
   const [seriesCount, setSeriesCount] = useState(0);
   const [selectedLiveCat, setSelectedLiveCat] = useState('');
@@ -50,13 +51,15 @@ export default function SourceDetail() {
           if (!res.ok) throw new Error(`Failed to fetch ${collection} count: ${res.status}`);
           return res.json();
         };
-        const [liveCatsData, vodData, seriesData] = await Promise.all([
+        const [liveCatsData, channelsData, vodData, seriesData] = await Promise.all([
           fetchCats('live'),
+          fetchCount('channels'),
           fetchCount('movies'),
           fetchCount('series'),
         ]);
         if (!cancelled) {
           setLiveCategories(liveCatsData.items as Category[]);
+          setChannelCount(channelsData.totalCount ?? 0);
           setVodCount(vodData.totalCount ?? 0);
           setSeriesCount(seriesData.totalCount ?? 0);
         }
@@ -197,25 +200,11 @@ export default function SourceDetail() {
       </Card>
 
       {/* Content counts */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{liveCategories.length}</div>
-            <p className="text-sm text-muted-foreground">Live Categories</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{vodCount}</div>
-            <p className="text-sm text-muted-foreground">Movies</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{seriesCount}</div>
-            <p className="text-sm text-muted-foreground">Series</p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap gap-6 text-sm">
+        <span><span className="font-semibold">{liveCategories.length}</span> <span className="text-muted-foreground">Categories</span></span>
+        <span><span className="font-semibold">{channelCount}</span> <span className="text-muted-foreground">Channels</span></span>
+        <span><span className="font-semibold">{vodCount}</span> <span className="text-muted-foreground">Movies</span></span>
+        <span><span className="font-semibold">{seriesCount}</span> <span className="text-muted-foreground">Series</span></span>
       </div>
 
       {/* Live channels */}
