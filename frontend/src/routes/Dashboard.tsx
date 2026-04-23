@@ -326,37 +326,31 @@ export default function Dashboard() {
       </Card>
 
       {/* Delete All Sources confirmation dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
-        <DialogHeader>
-          <DialogTitle>Delete All Sources</DialogTitle>
-          <DialogDescription>
-            This will permanently delete all sources and all their related data, including:
-          </DialogDescription>
-        </DialogHeader>
-        <div className="mt-2">
-          {deleteError && (
-            <p className="text-sm text-destructive mb-3">{deleteError}</p>
-          )}
-          <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-            <li>All channels</li>
-            <li>All movies</li>
-            <li>All series and episodes</li>
-            <li>All categories</li>
-            <li>All sync job records</li>
-          </ul>
-          <p className="text-sm text-destructive font-medium mt-3">
-            This action cannot be undone.
-          </p>
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !deleting && setDeleteDialogOpen(false)}>
+          <div className="relative z-50 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold">Delete All Sources</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete all sources and their related data
+              (channels, movies, series, categories, sync jobs).
+            </p>
+            <p className="mt-3 text-sm font-medium text-destructive">
+              This action cannot be undone.
+            </p>
+            {deleteError && (
+              <p className="mt-2 text-sm text-destructive">{deleteError}</p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteAllSources} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete Everything'}
+              </Button>
+            </div>
+          </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={handleDeleteAllSources} disabled={deleting}>
-            {deleting ? 'Deleting...' : 'Delete Everything'}
-          </Button>
-        </DialogFooter>
-      </Dialog>
+      )}
     </div>
   );
 }
