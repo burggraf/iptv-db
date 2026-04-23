@@ -202,7 +202,8 @@ async function _resolveCategory(pb, sourceId, type, categoryId, catMap, key) {
 }
 
 /**
- * Sync live channels with batched upserts.
+ * Sync live channels using bulk endpoint.
+ * Accumulates all channels, then sends ONE bulk call (server-side handles upsert + cleanup).
  */
 async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled) {
   checkCancelled(isCancelled);
@@ -220,11 +221,12 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
     return 0;
   }
 
-  // Build channel payloads for bulk upload
+  // Build channel payloads
   const channels = [];
-  const batchSize = 1000;
+  const step = Math.max(1, Math.floor(total / 20)); // report every 5%
 
-  for (const stream of streams) {
+  for (let i = 0; i < streams.length; i++) {
+    const stream = streams[i];
     const streamId = stream.stream_id || stream.stream_num;
     if (!streamId) continue;
 
@@ -244,20 +246,18 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
       added: stream.added || '',
     });
 
-    if (channels.length >= batchSize) {
-      await flushChannelBatchBulk(pb, sourceId, channels);
-      onProgress(`Syncing channels ${channels.length}/${total}...`, 15 + Math.floor((channels.length / total) * 30));
+    if (i % step === 0) {
+      onProgress(`Preparing channels ${i}/${total}...`, 15 + Math.floor((i / total) * 30));
       checkCancelled(isCancelled);
-      channels.length = 0;
     }
   }
 
-  if (channels.length > 0) {
-    await flushChannelBatchBulk(pb, sourceId, channels);
-  }
+  // Send all channels in one bulk call
+  onProgress(`Syncing ${channels.length} channels to database...`, 40);
+  await flushChannelBatchBulk(pb, sourceId, channels);
 
-  console.log(`[sync-job] Live channels: ${total} synced (bulk)`);
-  return total;
+  console.log(`[sync-job] Live channels: ${channels.length} synced (bulk)`);
+  return channels.length;
 }
 
 /**
