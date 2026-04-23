@@ -111,7 +111,7 @@ export default function Sources() {
                 <TableCell>{counts[s.id]?.series ?? '—'}</TableCell>
                 <TableCell>{formatDateTime(s.last_sync)}</TableCell>
                 <TableCell>
-                  <Link to={`/app/sources/${s.id}`}>
+                  <Link to={`/app/dashboard/${s.id}`}>
                     <Button variant="ghost" size="sm">View</Button>
                   </Link>
                 </TableCell>

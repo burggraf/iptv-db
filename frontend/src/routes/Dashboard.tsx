@@ -115,7 +115,7 @@ export default function Dashboard() {
   }, [sources]);
 
   const handleRowClick = (source: Source) => {
-    navigate(`/app/sources/${source.id}`);
+    navigate(`/app/dashboard/${source.id}`);
   };
 
   return (

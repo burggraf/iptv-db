@@ -32,6 +32,7 @@ function AppRoutes() {
       >
         <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dashboard/:id" element={<SourceDetail />} />
         <Route path="sources" element={<Sources />} />
         <Route path="sources/:id" element={<SourceDetail />} />
         <Route path="channels" element={<BrowseChannels />} />

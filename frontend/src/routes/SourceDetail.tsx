@@ -272,8 +272,8 @@ export default function SourceDetail() {
         </TabsContent>
       </Tabs>
 
-      <Link to="/app/sources">
-        <Button variant="outline">← Back to Sources</Button>
+      <Link to="/app/dashboard">
+        <Button variant="outline">← Back to Dashboard</Button>
       </Link>
     </div>
   );
