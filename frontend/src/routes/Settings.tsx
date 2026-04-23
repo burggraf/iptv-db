@@ -50,12 +50,13 @@ export default function Settings() {
 
   const loadActiveJobs = async () => {
     try {
-      const res = await pb.collection('sync_jobs').getFullList<SyncJob>({
+      const jobs = await pb.collection('sync_jobs').getFullList<SyncJob>({
         filter: 'status="running" || status="queued"',
         sort: '-created',
       });
+      // getFullList returns an array directly, not { items: [...] }
       const map: Record<string, SyncJob> = {};
-      for (const job of res.items) {
+      for (const job of jobs) {
         map[job.source_id] = job;
       }
       setActiveJobs(map);
