@@ -160,7 +160,7 @@ async function handleCancelAll(req, res) {
 
 async function handleSyncAll(req, res) {
   try {
-    const count = await syncEngine.enqueueByFilter('status="pending"');
+    const count = await syncEngine.enqueueByFilter('status!="error"');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ enqueued: count }));
   } catch (err) {
