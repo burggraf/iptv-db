@@ -64,17 +64,17 @@ export default function Dashboard() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingChecked, setDeletingChecked] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [countsLoading, setCountsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [sourcesRes, channelsRes, moviesRes, seriesRes, episodesRes] = await Promise.all([
+        const [sourcesRes, channelsRes, moviesRes, seriesRes] = await Promise.all([
           pb.collection('sources').getList(1, 1, { filter: '1=1' }),
           pb.collection('channels').getList(1, 1, { filter: 'available = true' }),
           pb.collection('movies').getList(1, 1, { filter: 'available = true' }),
           pb.collection('series').getList(1, 1, { filter: 'available = true' }),
-          pb.collection('series_episodes').getList(1, 1, { filter: 'available = true' }),
         ]);
         if (!cancelled) {
           setStats({
@@ -82,7 +82,7 @@ export default function Dashboard() {
             channels: channelsRes.totalItems,
             movies: moviesRes.totalItems,
             series: seriesRes.totalItems,
-            episodes: episodesRes.totalItems,
+            episodes: 0,
           });
         }
       } catch (err) {
@@ -127,6 +127,7 @@ export default function Dashboard() {
     }
     let cancelled = false;
     const loadCounts = async () => {
+      setCountsLoading(true);
       const newCounts: Record<string, { channels: number; movies: number; series: number }> = {};
       await Promise.all(
         sources.map(async (s) => {
@@ -140,7 +141,10 @@ export default function Dashboard() {
           } catch { /* skip */ }
         }),
       );
-      if (!cancelled) setCounts(newCounts);
+      if (!cancelled) {
+        setCounts(newCounts);
+        setCountsLoading(false);
+      }
     };
     loadCounts();
     return () => { cancelled = true };
@@ -231,7 +235,13 @@ export default function Dashboard() {
     navigate(`/app/dashboard/${source.id}`);
   };
 
-  const hasActiveSyncs = Object.keys(activeJobs).length > 0 || Object.values(syncing).some(Boolean);
+  if (loading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
