@@ -20,7 +20,6 @@ export class SyncEngine {
    * Deduplicates — won't add if already queued or running.
    */
   enqueue(sourceId) {
-    // Don't re-queue if it was just cancelled — clear the flag
     this.cancelled.delete(sourceId);
     if (this.running.has(sourceId)) {
       console.log(`[engine] Source ${sourceId} already being processed, skipping`);
@@ -32,7 +31,6 @@ export class SyncEngine {
     }
     this.queue.push(sourceId);
     console.log(`[engine] Enqueued source ${sourceId} (queue size: ${this.queue.length})`);
-    this.createSyncJobRecord(sourceId, 'queued');
     this.processQueue();
   }
 
@@ -85,11 +83,12 @@ export class SyncEngine {
   /**
    * Process queued jobs up to concurrency limit.
    */
-  processQueue() {
+  async processQueue() {
     while (this.activeWorkers < this.concurrency && this.queue.length > 0) {
       const sourceId = this.queue.shift();
       this.activeWorkers++;
       this.running.add(sourceId);
+      await this.createSyncJobRecord(sourceId, 'queued');
       this.processSource(sourceId);
     }
   }
