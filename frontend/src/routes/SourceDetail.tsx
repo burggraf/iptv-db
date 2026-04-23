@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
-import type { Source, Category, Channel, Movie, Series } from '../types/database';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import type { Source, SyncJob, Category, Channel, Movie, Series } from '../types/database';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
@@ -27,6 +27,8 @@ export default function SourceDetail() {
   const [series, setSeriesData] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -133,6 +135,27 @@ export default function SourceDetail() {
     return () => { cancelled = true; };
   }, [id, selectedSeriesCat, search]);
 
+  // Poll sync jobs for this source
+  useEffect(() => {
+    if (!id) return;
+    const checkJob = async () => {
+      try {
+        const jobs = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
+          filter: `source_id="${id}" && (status="running" || status="queued")`,
+          sort: '-created',
+        });
+        const job = jobs.items[0] ?? null;
+        setSyncJob(job);
+        setIsSyncing(!!job);
+      } catch { /* ignore */ }
+    };
+    checkJob();
+    const unsub = pb.collection('sync_jobs').subscribe('*', () => {
+      checkJob();
+    });
+    return () => { unsub.then((u: () => void) => u()); };
+  }, [id]);
+
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
 
   if (!source) return <div className="text-muted-foreground">Source not found.</div>;
@@ -148,14 +171,40 @@ export default function SourceDetail() {
               <p className="text-sm text-muted-foreground mt-1">{source.base_url}</p>
             </div>
             <div className="flex gap-2">
-              <Badge variant={source.status === 'active' ? 'success' : source.status === 'error' ? 'destructive' : 'secondary'}>
-                {source.status}
-              </Badge>
+              {isSyncing && syncJob ? (
+                <Badge variant="warning">
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-current" />
+                    {syncJob.phase || 'Syncing'}
+                  </span>
+                </Badge>
+              ) : (
+                <Badge variant={source.status === 'active' ? 'success' : source.status === 'error' ? 'destructive' : source.status === 'pending' ? 'warning' : 'secondary'}>
+                  {source.status}
+                </Badge>
+              )}
               <Badge variant="secondary">{source.type}</Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {isSyncing && syncJob && (
+            <div className="mb-4 space-y-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <span className="font-medium">{syncJob.phase || 'Syncing...'}</span>
+                </span>
+                <span className="text-muted-foreground">{Math.round(syncJob.progress ?? 0)}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${syncJob.progress ?? 0}%` }}
+                />
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-4 text-sm">
             <div>
               <span className="text-muted-foreground">Username</span>

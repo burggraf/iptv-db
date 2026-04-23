@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings, Trash2, Globe } from 'lucide-react';
+import { Settings, Trash2, Globe, RefreshCw } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
+import type { SyncJob } from '../types/database';
 
 const navItems = [
   { to: '/app/dashboard', label: 'Dashboard', icon: '📊' },
@@ -28,6 +29,52 @@ export default function AppLayout() {
   const [scrapeResult, setScrapeResult] = useState<{ added: number; updated: number } | null>(null);
   const [scrapeError, setScrapeError] = useState('');
   const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Source detail page context
+  const sourceDetailMatch = location.pathname.match(/^\/app\/dashboard\/([a-z0-9]{15})$/);
+  const currentSourceId = sourceDetailMatch?.[1] ?? null;
+  const [sourceSyncing, setSourceSyncing] = useState(false);
+  const [sourceSyncJob, setSourceSyncJob] = useState<SyncJob | null>(null);
+
+  // Poll sync jobs for current source
+  useEffect(() => {
+    if (!currentSourceId) {
+      setSourceSyncJob(null);
+      setSourceSyncing(false);
+      return;
+    }
+    const checkJob = async () => {
+      try {
+        const jobs = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
+          filter: `source_id="${currentSourceId}" && (status="running" || status="queued")`,
+          sort: '-created',
+        });
+        const job = jobs.items[0] ?? null;
+        setSourceSyncJob(job);
+        setSourceSyncing(!!job);
+      } catch { /* ignore */ }
+    };
+    checkJob();
+    const interval = setInterval(checkJob, 3000);
+    return () => clearInterval(interval);
+  }, [currentSourceId]);
+
+  const handleSyncSource = async () => {
+    if (!currentSourceId) return;
+    setSettingsOpen(false);
+    setSourceSyncing(true);
+    try {
+      const res = await fetch('/worker/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_id: currentSourceId }),
+      });
+      if (!res.ok) throw new Error('Sync request failed');
+    } catch (err) {
+      console.error('Sync failed:', err);
+      setSourceSyncing(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -158,24 +205,35 @@ export default function AppLayout() {
               {settingsOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 rounded-md border bg-card shadow-lg z-50">
                   <div className="py-1">
-                    <button
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setScrapeDialogOpen(true);
-                      }}
-                    >
-                      <Globe className="h-4 w-4" /> Scrape Sources
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" /> Delete All Sources
-                    </button>
+                    {currentSourceId ? (
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={handleSyncSource}
+                      >
+                        <RefreshCw className="h-4 w-4" /> Sync
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setScrapeDialogOpen(true);
+                          }}
+                        >
+                          <Globe className="h-4 w-4" /> Scrape Sources
+                        </button>
+                        <button
+                          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" /> Delete All Sources
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
