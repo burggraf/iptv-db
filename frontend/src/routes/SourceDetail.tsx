@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
-import type { Source, SyncJob, Category, Channel, Movie, Series } from '../types/database';
+import type { Source, SyncJob, Category, Channel } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { Select } from '../components/ui/select';
 import { Input } from '../components/ui/input';
 import {
@@ -18,14 +17,10 @@ export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
   const [source, setSource] = useState<Source | null>(null);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
-  const [vodCategories, setVodCategories] = useState<Category[]>([]);
-  const [seriesCategories, setSeriesCategories] = useState<Category[]>([]);
+  const [vodCount, setVodCount] = useState(0);
+  const [seriesCount, setSeriesCount] = useState(0);
   const [selectedLiveCat, setSelectedLiveCat] = useState('');
-  const [selectedVodCat, setSelectedVodCat] = useState('');
-  const [selectedSeriesCat, setSelectedSeriesCat] = useState('');
   const [liveChannels, setLiveChannels] = useState<Channel[]>([]);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [series, setSeriesData] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
@@ -41,8 +36,6 @@ export default function SourceDetail() {
         const src = await pb.collection('sources').getOne<Source>(id);
         if (!cancelled) setSource(src);
 
-        // Use raw fetch — pb.collection().getList() causes ERR_ABORTED
-        // in PocketBase SDK v0.25.2 when called on the categories collection.
         const headers: Record<string, string> = {};
         if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
         const fetchCats = async (type: string) => {
@@ -51,15 +44,21 @@ export default function SourceDetail() {
           if (!res.ok) throw new Error(`Failed to fetch ${type} categories: ${res.status}`);
           return res.json();
         };
-        const [liveCatsData, vodCatsData, seriesCatsData] = await Promise.all([
+        const fetchCount = async (collection: string) => {
+          const url = `/api/collections/${collection}/records?page=1&perPage=1&filter=${encodeURIComponent(`source_id="${id}"`)}`;
+          const res = await fetch(url, { headers });
+          if (!res.ok) throw new Error(`Failed to fetch ${collection} count: ${res.status}`);
+          return res.json();
+        };
+        const [liveCatsData, vodData, seriesData] = await Promise.all([
           fetchCats('live'),
-          fetchCats('vod'),
-          fetchCats('series'),
+          fetchCount('movies'),
+          fetchCount('series'),
         ]);
         if (!cancelled) {
           setLiveCategories(liveCatsData.items as Category[]);
-          setVodCategories(vodCatsData.items as Category[]);
-          setSeriesCategories(seriesCatsData.items as Category[]);
+          setVodCount(vodData.totalCount ?? 0);
+          setSeriesCount(seriesData.totalCount ?? 0);
         }
       } catch (err) {
         if (!isAbortError(err)) console.error(err);
@@ -86,58 +85,12 @@ export default function SourceDetail() {
         if (!cancelled) setLiveChannels(res.items);
       } catch (err) {
         if (isAbortError(err)) return;
-        /* skip */
       }
     };
     load();
     return () => { cancelled = true; };
   }, [id, selectedLiveCat, search]);
 
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    const load = async () => {
-      const filterParts = [`source_id="${id}"`, 'available=true'];
-      if (selectedVodCat) filterParts.push(`category_id="${selectedVodCat}"`);
-      if (search) filterParts.push(`name ~ "${search}"`);
-      try {
-        const res = await pb.collection('movies').getList<Movie>(1, 100, {
-          filter: filterParts.join(' && '),
-          sort: 'name',
-        });
-        if (!cancelled) setMovies(res.items);
-      } catch (err) {
-        if (isAbortError(err)) return;
-        /* skip */
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [id, selectedVodCat, search]);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    const load = async () => {
-      const filterParts = [`source_id="${id}"`, 'available=true'];
-      if (selectedSeriesCat) filterParts.push(`category_id="${selectedSeriesCat}"`);
-      if (search) filterParts.push(`name ~ "${search}"`);
-      try {
-        const res = await pb.collection('series').getList<Series>(1, 100, {
-          filter: filterParts.join(' && '),
-          sort: 'name',
-        });
-        if (!cancelled) setSeriesData(res.items);
-      } catch (err) {
-        if (isAbortError(err)) return;
-        /* skip */
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [id, selectedSeriesCat, search]);
-
-  // Poll sync jobs for this source
   useEffect(() => {
     if (!id) return;
     const checkJob = async () => {
@@ -151,7 +104,6 @@ export default function SourceDetail() {
         setIsSyncing(!!activeJob);
         if (activeJob) return;
 
-        // No active job — check for most recent failed job
         const failed = await pb.collection('sync_jobs').getList<SyncJob>(1, 1, {
           filter: `source_id="${id}" && status="failed"`,
           sort: '-created',
@@ -167,7 +119,6 @@ export default function SourceDetail() {
   }, [id]);
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
-
   if (!source) return <div className="text-muted-foreground">Source not found.</div>;
 
   return (
@@ -245,23 +196,42 @@ export default function SourceDetail() {
         </CardContent>
       </Card>
 
-      {/* Content tabs */}
-      <Tabs defaultValue="live">
-        <div className="flex items-center justify-between mb-4">
-          <TabsList>
-            <TabsTrigger value="live">Live ({liveCategories.length})</TabsTrigger>
-            <TabsTrigger value="vod">Movies ({vodCategories.length})</TabsTrigger>
-            <TabsTrigger value="series">Series ({seriesCategories.length})</TabsTrigger>
-          </TabsList>
-          <Input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-48"
-          />
-        </div>
+      {/* Content counts */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{liveCategories.length}</div>
+            <p className="text-sm text-muted-foreground">Live Categories</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{vodCount}</div>
+            <p className="text-sm text-muted-foreground">Movies</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{seriesCount}</div>
+            <p className="text-sm text-muted-foreground">Series</p>
+          </CardContent>
+        </Card>
+      </div>
 
-        <TabsContent value="live">
+      {/* Live channels */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Live Channels</CardTitle>
+            <Input
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-48"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
           <div className="flex gap-4 mb-4">
             <Select
               value={selectedLiveCat}
@@ -300,56 +270,8 @@ export default function SourceDetail() {
               )}
             </TableBody>
           </Table>
-        </TabsContent>
-
-        <TabsContent value="vod">
-          <div className="flex gap-4 mb-4">
-            <Select
-              value={selectedVodCat}
-              onChange={(e) => setSelectedVodCat(e.target.value)}
-              className="w-64"
-            >
-              <option value="">All Categories</option>
-              {vodCategories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
-          </div>
-          <ContentTable
-            columns={['Name', 'Year', 'Genre', 'Rating']}
-            rows={movies.map((m) => [
-              m.name,
-              m.year || '—',
-              m.genre || '—',
-              m.rating ? `${m.rating}/10` : '—',
-            ])}
-          />
-        </TabsContent>
-
-        <TabsContent value="series">
-          <div className="flex gap-4 mb-4">
-            <Select
-              value={selectedSeriesCat}
-              onChange={(e) => setSelectedSeriesCat(e.target.value)}
-              className="w-64"
-            >
-              <option value="">All Categories</option>
-              {seriesCategories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
-          </div>
-          <ContentTable
-            columns={['Name', 'Year', 'Genre', 'Rating']}
-            rows={series.map((s) => [
-              s.name,
-              s.year || '—',
-              s.genre || '—',
-              s.rating ? `${s.rating}/10` : '—',
-            ])}
-          />
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
 
       <Link to="/app/dashboard">
         <Button variant="outline">← Back to Dashboard</Button>
@@ -357,28 +279,5 @@ export default function SourceDetail() {
 
       <ChannelDetailModal channelId={selectedChannelId} onClose={() => setSelectedChannelId(null)} />
     </div>
-  );
-}
-
-function ContentTable({ columns, rows }: { columns: string[]; rows: React.ReactNode[][] }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map((h) => <TableHead key={h}>{h}</TableHead>)}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.length === 0 ? (
-          <TableRow><TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">No items found.</TableCell></TableRow>
-        ) : (
-          rows.map((row, i) => (
-            <TableRow key={i}>
-              {row.map((cell, j) => <TableCell key={j}>{cell}</TableCell>)}
-            </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
   );
 }
