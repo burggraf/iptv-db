@@ -199,25 +199,16 @@ export default function Dashboard() {
     setDeletingChecked(true);
     setDeleteError('');
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
-      const res = await fetch('/api/cascade-delete', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ source_ids: [...checked] }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Server error: ${res.status}`);
-      }
+      const ids = [...checked];
+      await Promise.all(ids.map(id => pb.collection('sources').delete(id)));
       setChecked(new Set());
       setDeleteOpen(false);
       setDeletingChecked(false);
       setSources(prev => prev.filter(s => !checked.has(s.id)));
-      setTotalItems(prev => prev - checked.size);
+      setTotalItems(prev => Math.max(0, prev - ids.length));
       setCounts(prev => {
         const next = { ...prev };
-        for (const id of checked) delete next[id];
+        for (const id of ids) delete next[id];
         return next;
       });
     } catch (err) {
