@@ -134,7 +134,7 @@ async function handleSyncCancel(req, res, url) {
   }
 
   try {
-    syncEngine.cancel(sourceId);
+    await syncEngine.cancel(sourceId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ cancelled: true, source_id: sourceId }));
   } catch (err) {

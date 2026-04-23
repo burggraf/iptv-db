@@ -40,25 +40,44 @@ export class SyncEngine {
    * Cancel a running or queued sync for a source.
    */
   cancel(sourceId) {
-    // Remove from queue if still waiting
+    const wasRunning = this.running.has(sourceId);
+
     const queueIndex = this.queue.indexOf(sourceId);
     if (queueIndex !== -1) {
       this.queue.splice(queueIndex, 1);
       console.log(`[engine] Removed source ${sourceId} from queue`);
     }
 
-    // Mark as cancelled so running worker stops at next checkpoint
-    if (this.running.has(sourceId)) {
+    if (wasRunning) {
       this.cancelled.add(sourceId);
       console.log(`[engine] Marked running source ${sourceId} for cancellation`);
     }
 
-    // Update the sync job record
-    this.updateSyncJob(sourceId, {
-      status: 'cancelled',
-      phase: 'Cancelled by user',
-      finished_at: new Date().toISOString(),
-    });
+    // Always update the latest sync job record, even if the source isn't
+    // in our in-memory state (e.g. after a restart, UI shows stale "running").
+    return this.cancelSyncJob(sourceId);
+  }
+
+  /**
+   * Update the latest sync job to cancelled status.
+   */
+  async cancelSyncJob(sourceId) {
+    try {
+      const jobs = await this.pb.collection('sync_jobs').getList(1, 1, {
+        filter: `source_id="${sourceId}"`,
+        sort: '-created',
+      });
+      if (jobs.items.length > 0) {
+        await this.pb.collection('sync_jobs').update(jobs.items[0].id, {
+          status: 'cancelled',
+          phase: 'Cancelled by user',
+          finished_at: new Date().toISOString(),
+        });
+        console.log(`[engine] Updated sync job ${jobs.items[0].id} to cancelled`);
+      }
+    } catch (err) {
+      console.error(`[engine] Failed to cancel sync job for ${sourceId}:`, err.message);
+    }
   }
 
   /**

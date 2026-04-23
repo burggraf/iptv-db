@@ -79,12 +79,12 @@ export default function AppLayout() {
   const handleCancelSync = async () => {
     if (!currentSourceId) return;
     setSettingsOpen(false);
+    setSourceSyncing(false);
+    setSourceSyncJob(null);
     try {
       await fetch(`/worker/api/sync/${currentSourceId}/cancel`, {
         method: 'POST',
       });
-      setSourceSyncing(false);
-      setSourceSyncJob(null);
     } catch (err) {
       console.error('Cancel sync failed:', err);
     }
