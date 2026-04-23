@@ -59,9 +59,9 @@ export default function SourceDetail() {
         ]);
         if (!cancelled) {
           setLiveCategories(liveCatsData.items as Category[]);
-          setChannelCount(channelsData.totalCount ?? 0);
-          setVodCount(vodData.totalCount ?? 0);
-          setSeriesCount(seriesData.totalCount ?? 0);
+          setChannelCount(channelsData.totalItems ?? 0);
+          setVodCount(vodData.totalItems ?? 0);
+          setSeriesCount(seriesData.totalItems ?? 0);
         }
       } catch (err) {
         if (!isAbortError(err)) console.error(err);
