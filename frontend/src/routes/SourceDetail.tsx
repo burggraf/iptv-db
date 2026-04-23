@@ -39,7 +39,8 @@ export default function SourceDetail() {
         const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="live"`)}`;
         const res = await fetch(url, { headers });
         if (!res.ok) throw new Error(`Failed to fetch live categories: ${res.status}`);
-        if (!cancelled) setLiveCategories(res.json().items as Category[]);
+        const data = await res.json();
+        if (!cancelled) setLiveCategories(data.items as Category[]);
       } catch (err) {
         if (!isAbortError(err)) console.error(err);
       } finally {
