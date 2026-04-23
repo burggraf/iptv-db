@@ -75,9 +75,15 @@ systemctl enable iptv-pb.service iptv-worker.service
 "
 echo "✓ systemd services installed and enabled"
 
-# 7. Sync worker code
-echo "→ Syncing worker code..."
+# 7. Sync migrations
+echo "→ Syncing migrations..."
 rsync -avz --delete --exclude='node_modules' --exclude='.env' "$SCRIPT_DIR/worker/" "$SSH_HOST:$REMOTE_BASE/worker/"
+if [ -d "$SCRIPT_DIR/migrations" ]; then
+    rsync -avz "$SCRIPT_DIR/migrations/" "$SSH_HOST:$REMOTE_BASE/pb_migrations/"
+    echo "✓ Migrations synced"
+else
+    echo "⊘ No migrations to sync"
+fi
 ssh "$SSH_HOST" "cd $REMOTE_BASE/worker && npm install --omit=dev --quiet 2>&1"
 echo "✓ Worker synced"
 
