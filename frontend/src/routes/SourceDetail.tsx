@@ -7,7 +7,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
-import { Trash2, MoreVertical, RefreshCw } from 'lucide-react';
+import { Trash2, MoreVertical, RefreshCw, Copy, Check } from 'lucide-react';
 import ChannelDetailModal from '../components/ChannelDetailModal';
 import PaginatedTable, { type Column } from '../components/PaginatedTable';
 import BatchActionsBar from '../components/BatchActionsBar';
@@ -26,6 +26,18 @@ export default function SourceDetail() {
   const navigate = useNavigate();
 
   const { selectedIds, toggle, clear } = useChannelSelection();
+  const [copied, setCopied] = useState(false);
+
+  const m3uUrl = source?.type === 'xtream' && source?.base_url && source?.username && source?.password
+    ? `${source.base_url.replace(/\/$/, '')}/get.php?username=${encodeURIComponent(source.username)}&password=${encodeURIComponent(source.password)}&type=m3u_plus`
+    : source?.m3u_url || '';
+
+  const handleCopyM3u = async () => {
+    if (!m3uUrl) return;
+    await navigator.clipboard.writeText(m3uUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Refresh key to force PaginatedTable reload after batch operations
   const [refreshKey, setRefreshKey] = useState(0);
@@ -67,7 +79,11 @@ export default function SourceDetail() {
   const handleSync = async () => {
     if (!id) return;
     try {
-      await pb.collection('sync_jobs').create({ source_id: id });
+      await fetch('/worker/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_id: id }),
+      });
       setIsSyncing(true);
     } catch (err) {
       console.error('Failed to start sync:', err);
@@ -243,6 +259,19 @@ export default function SourceDetail() {
               <p className="font-medium">{formatDateTime(source.last_sync)}</p>
             </div>
           </div>
+          {m3uUrl && (
+            <div className="mt-4 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+              <span className="text-xs font-medium text-muted-foreground shrink-0">M3U URL:</span>
+              <code className="flex-1 truncate text-xs font-mono" title={m3uUrl}>{m3uUrl}</code>
+              <button
+                onClick={handleCopyM3u}
+                className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                title="Copy to clipboard"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          )}
           {source.sync_status && source.sync_status !== 'ok' && !syncJob?.error && (
             <p className="mt-2 text-sm text-destructive">{source.sync_status}</p>
           )}
