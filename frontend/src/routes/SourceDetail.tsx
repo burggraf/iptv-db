@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, Link, useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source, SyncJob, Category, Channel } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
+import { Trash2, MoreVertical } from 'lucide-react';
 import ChannelDetailModal from '../components/ChannelDetailModal';
 import PaginatedTable, { type Column } from '../components/PaginatedTable';
 
@@ -20,6 +21,37 @@ export default function SourceDetail() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState('');
+  const navigate = useNavigate();
+
+  // Settings menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  // Delete confirmation
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await pb.collection('sources').delete(id);
+      navigate('/app/dashboard');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -105,7 +137,7 @@ export default function SourceDetail() {
               <CardTitle className="text-xl">{source.name}</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">{source.base_url}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               {isSyncing && syncJob ? (
                 <Badge variant="warning">
                   <span className="flex items-center gap-1">
@@ -119,6 +151,24 @@ export default function SourceDetail() {
                 </Badge>
               )}
               <Badge variant="secondary">{source.type}</Badge>
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 mt-1 w-44 rounded-md border bg-popover p-1 shadow-md z-50">
+                    <button
+                      className="relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive outline-none hover:bg-accent hover:text-destructive"
+                      onClick={() => { setMenuOpen(false); setDeleteOpen(true); }}
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete Source
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -213,6 +263,37 @@ export default function SourceDetail() {
       </Link>
 
       <ChannelDetailModal channelId={selectedChannelId} onClose={() => setSelectedChannelId(null)} />
+
+      {/* Delete confirmation dialog */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !deleting && setDeleteOpen(false)}>
+          <div className="relative z-50 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold">Delete Source</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete <strong>{source.name}</strong> and all its related data
+              (channels, movies, series, categories, sync jobs).
+            </p>
+            <p className="mt-3 text-sm font-medium text-destructive">This action cannot be undone.</p>
+            {deleteError && <p className="mt-2 text-sm text-destructive">{deleteError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 border"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2 disabled:opacity-50"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
