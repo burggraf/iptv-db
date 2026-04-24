@@ -134,6 +134,16 @@ export interface SyncJobExpanded extends SyncJob {
   };
 }
 
+export interface M3UPlaylist extends RecordModel {
+  name: string;
+  slug: string;
+  source_id: string;
+  include_live: boolean;
+  include_vod: boolean;
+  include_series: boolean;
+  created_by_user_id: string;
+}
+
 // Source with counts (computed by dashboard)
 export interface SourceWithCounts extends Source {
   channel_count?: number;

@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
-import type { Source, SyncJob, Category, Channel } from '../types/database';
+import type { Source, SyncJob, Category, Channel, M3UPlaylist } from '../types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter } from '../components/ui/dialog';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
-import { Trash2, MoreVertical, RefreshCw, Copy, Check } from 'lucide-react';
+import { Trash2, MoreVertical, RefreshCw, Copy, Check, ListMusic, Plus } from 'lucide-react';
 import ChannelDetailModal from '../components/ChannelDetailModal';
 import PaginatedTable, { type Column } from '../components/PaginatedTable';
 import BatchActionsBar from '../components/BatchActionsBar';
@@ -26,17 +27,80 @@ export default function SourceDetail() {
   const navigate = useNavigate();
 
   const { selectedIds, toggle, clear } = useChannelSelection();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [myPlaylists, setMyPlaylists] = useState<M3UPlaylist[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [includeLive, setIncludeLive] = useState(true);
+  const [includeVod, setIncludeVod] = useState(false);
+  const [includeSeries, setIncludeSeries] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const m3uUrl = source?.type === 'xtream' && source?.base_url && source?.username && source?.password
-    ? `${source.base_url.replace(/\/$/, '')}/get.php?username=${encodeURIComponent(source.username)}&password=${encodeURIComponent(source.password)}&type=m3u`
-    : source?.m3u_url || '';
+  const handleCopyUrl = async (slug: string, url: string) => {
+    await navigator.clipboard.writeText(url);
+    setCopied(slug);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
-  const handleCopyM3u = async () => {
-    if (!m3uUrl) return;
-    await navigator.clipboard.writeText(m3uUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const loadPlaylists = async (srcId: string) => {
+    try {
+      const headers: Record<string, string> = {};
+      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      const res = await fetch(`/api/collections/m3u_playlists/records?filter=${encodeURIComponent(`source_id="${srcId}"`)}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setMyPlaylists(data.items as M3UPlaylist[]);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleCreatePlaylist = async () => {
+    if (!id || !newName.trim() || !newSlug.trim()) return;
+    setCreateError('');
+    setCreating(true);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      const res = await fetch('/api/collections/m3u_playlists/records', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: newName.trim(),
+          slug: newSlug.trim(),
+          source_id: id,
+          include_live: includeLive,
+          include_vod: includeVod,
+          include_series: includeSeries,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setCreateError(err.message || 'Failed to create playlist');
+        setCreating(false);
+        return;
+      }
+      setCreateOpen(false);
+      setNewName('');
+      setNewSlug('');
+      setIncludeLive(true);
+      setIncludeVod(false);
+      setIncludeSeries(false);
+      await loadPlaylists(id);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed');
+    }
+    setCreating(false);
+  };
+
+  const handleDeletePlaylist = async (playlistId: string) => {
+    try {
+      const headers: Record<string, string> = {};
+      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      await fetch(`/api/collections/m3u_playlists/records/${playlistId}`, { method: 'DELETE', headers });
+      await loadPlaylists(id!);
+    } catch { /* ignore */ }
   };
 
   // Refresh key to force PaginatedTable reload after batch operations
@@ -114,6 +178,11 @@ export default function SourceDetail() {
     };
     load();
     return () => { cancelled = true; };
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadPlaylists(id);
   }, [id]);
 
   useEffect(() => {
@@ -259,19 +328,50 @@ export default function SourceDetail() {
               <p className="font-medium">{formatDateTime(source.last_sync)}</p>
             </div>
           </div>
-          {m3uUrl && (
-            <div className="mt-4 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-              <span className="text-xs font-medium text-muted-foreground shrink-0">M3U URL:</span>
-              <code className="flex-1 truncate text-xs font-mono" title={m3uUrl}>{m3uUrl}</code>
+          {/* M3U Playlists */}
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">M3U Playlists</span>
               <button
-                onClick={handleCopyM3u}
-                className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
-                title="Copy to clipboard"
+                onClick={() => setCreateOpen(true)}
+                className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                <Plus className="h-3.5 w-3.5" /> Generate
               </button>
             </div>
-          )}
+            {myPlaylists.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No playlists yet. Generate one for VLC or any IPTV player.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {myPlaylists.map((pl) => {
+                  const plUrl = `${window.location.origin}/api/m3u/${pl.slug}.m3u`;
+                  return (
+                    <div key={pl.id} className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5">
+                      <ListMusic className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="flex-1 truncate text-xs font-medium">{pl.name}</span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {[pl.include_live && 'Live', pl.include_vod && 'VOD', pl.include_series && 'Series'].filter(Boolean).join(', ')}
+                      </span>
+                      <button
+                        onClick={() => handleCopyUrl(pl.slug, plUrl)}
+                        className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
+                        title="Copy URL"
+                      >
+                        {copied === pl.slug ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlaylist(pl.id)}
+                        className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {source.sync_status && source.sync_status !== 'ok' && !syncJob?.error && (
             <p className="mt-2 text-sm text-destructive">{source.sync_status}</p>
           )}
@@ -328,6 +428,71 @@ export default function SourceDetail() {
 
       {/* Batch actions floating bar */}
       <BatchActionsBar onSuccess={handleBatchSuccess} />
+
+      {/* M3U Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogHeader>
+          <DialogTitle>Generate M3U Playlist</DialogTitle>
+          <DialogDescription>Create a custom M3U playlist for VLC or any IPTV player.</DialogDescription>
+        </DialogHeader>
+        <DialogContent className="space-y-3">
+          <div>
+            <label className="text-sm font-medium">Display Name</label>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="My Playlist"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">URL Slug</label>
+            <div className="mt-1 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">{window.location.origin}/api/m3u/</span>
+              <input
+                type="text"
+                value={newSlug}
+                onChange={(e) => setNewSlug(e.target.value.replace(/[^a-z0-9_-]/gi, '').toLowerCase())}
+                placeholder="my-playlist"
+                className="w-40 rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+              />
+              <span className="text-xs text-muted-foreground">.m3u</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Content</label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={includeLive} onChange={(e) => setIncludeLive(e.target.checked)} className="rounded" />
+              Live Channels
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={includeVod} onChange={(e) => setIncludeVod(e.target.checked)} className="rounded" />
+              Movies (VOD)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={includeSeries} onChange={(e) => setIncludeSeries(e.target.checked)} className="rounded" />
+              Series
+            </label>
+          </div>
+          {createError && <p className="text-sm text-destructive">{createError}</p>}
+        </DialogContent>
+        <DialogFooter>
+          <button
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 border"
+            onClick={() => setCreateOpen(false)}
+          >
+            Cancel
+          </button>
+          <button
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 disabled:opacity-50"
+            onClick={handleCreatePlaylist}
+            disabled={creating || !newName.trim() || !newSlug.trim()}
+          >
+            {creating ? 'Creating...' : 'Create'}
+          </button>
+        </DialogFooter>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       {deleteOpen && (
