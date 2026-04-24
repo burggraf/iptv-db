@@ -1,13 +1,15 @@
 /**
  * Dynamic M3U playlist generator.
- * GET /api/m3u/{slug}.m3u
+ * GET /api/m3u/{slug}
  *
  * Reads playlist config from DB, fetches live channels + categories,
  * builds proper #EXTINF M3U with Xtream stream URLs.
  */
-routerAdd("GET", "/api/m3u/:slug.m3u", (e) => {
+routerAdd("GET", "/api/m3u/:slug", (e) => {
     try {
-        const slug = e.request.pathValue("slug");
+        var slug = e.request.pathValue("slug") || "";
+        // Allow .m3u suffix for convenience (e.g., /api/m3u/bob.m3u)
+        if (slug.endsWith(".m3u")) slug = slug.slice(0, -4);
         if (!slug) {
             return e.json(400, { message: "slug required" });
         }
