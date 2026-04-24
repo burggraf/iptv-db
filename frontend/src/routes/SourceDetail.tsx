@@ -29,7 +29,7 @@ export default function SourceDetail() {
   const [copied, setCopied] = useState(false);
 
   const m3uUrl = source?.type === 'xtream' && source?.base_url && source?.username && source?.password
-    ? `${source.base_url.replace(/\/$/, '')}/get.php?username=${encodeURIComponent(source.username)}&password=${encodeURIComponent(source.password)}&type=m3u_plus`
+    ? `${source.base_url.replace(/\/$/, '')}/get.php?username=${encodeURIComponent(source.username)}&password=${encodeURIComponent(source.password)}&type=m3u`
     : source?.m3u_url || '';
 
   const handleCopyM3u = async () => {
