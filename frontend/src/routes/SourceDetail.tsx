@@ -63,6 +63,7 @@ export default function SourceDetail() {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      // Create playlist record
       const res = await fetch('/api/collections/m3u_playlists/records', {
         method: 'POST',
         headers,
@@ -80,6 +81,15 @@ export default function SourceDetail() {
         setCreateError(err.message || 'Failed to create playlist');
         setCreating(false);
         return;
+      }
+      // Generate the M3U file
+      const genRes = await fetch('/api/playlist/generate', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ slug: newSlug.trim() }),
+      });
+      if (!genRes.ok) {
+        console.error('Failed to generate M3U file');
       }
       setCreateOpen(false);
       setNewName('');
@@ -99,6 +109,15 @@ export default function SourceDetail() {
       const headers: Record<string, string> = {};
       if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
       await fetch(`/api/collections/m3u_playlists/records/${playlistId}`, { method: 'DELETE', headers });
+      // Delete the M3U file too
+      const pl = myPlaylists.find(p => p.id === playlistId);
+      if (pl) {
+        await fetch('/api/playlist/generate', {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({ slug: pl.slug }),
+        });
+      }
       await loadPlaylists(id!);
     } catch { /* ignore */ }
   };
@@ -344,7 +363,7 @@ export default function SourceDetail() {
             ) : (
               <div className="space-y-1.5">
                 {myPlaylists.map((pl) => {
-                  const plUrl = `${window.location.origin}/api/playlist/${pl.slug}.m3u`;
+                  const plUrl = `${window.location.origin}/${pl.slug}.m3u`;
                   return (
                     <div key={pl.id} className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5">
                       <ListMusic className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -449,7 +468,7 @@ export default function SourceDetail() {
           <div>
             <label className="text-sm font-medium">URL Slug</label>
             <div className="mt-1 flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">{window.location.origin}/api/playlist/</span>
+              <span className="text-xs text-muted-foreground">{window.location.origin}/</span>
               <input
                 type="text"
                 value={newSlug}
