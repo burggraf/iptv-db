@@ -266,7 +266,11 @@ export default function SourceDetail() {
           <div className="flex items-start justify-between">
             <div>
               <CardTitle className="text-xl">{source.name}</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">{source.base_url}</p>
+              <p className="text-sm text-muted-foreground mt-1 font-mono">
+                <span className="text-muted-foreground">url: </span>{source.base_url}
+                {source.username && <><span className="text-muted-foreground ml-2">user: </span>{source.username}</>}
+                {source.password && <><span className="text-muted-foreground ml-2">pass: </span>{source.password}</>}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {isSyncing && syncJob ? (
@@ -337,8 +341,8 @@ export default function SourceDetail() {
           )}
           <div className="grid gap-4 sm:grid-cols-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Username</span>
-              <p className="font-medium">{source.username || '—'}</p>
+              <span className="text-muted-foreground">Password</span>
+              <p className="font-medium">{source.password || '—'}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Max Connections</span>
