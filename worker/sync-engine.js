@@ -148,8 +148,7 @@ export class SyncEngine {
           phase: `Retry ${attempt}/${maxRetries} in ${delay / 1000}s...`,
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
-        this.running.delete(sourceId);
-        this.activeWorkers--;
+        // Don't decrement here — finally block handles it when recursive call returns
         return this.processSource(sourceId, attempt + 1);
       }
 
@@ -172,9 +171,11 @@ export class SyncEngine {
 
       console.log(`[engine] Source ${sourceId} failed permanently: ${err.message}`);
     } finally {
-      this.running.delete(sourceId);
-      this.activeWorkers--;
-      this.processQueue();// Process next in queue
+      if (this.running.has(sourceId)) {
+        this.running.delete(sourceId);
+      }
+      this.activeWorkers = Math.max(0, this.activeWorkers - 1);
+      this.processQueue();
     }
   }
 
