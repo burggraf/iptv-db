@@ -28,19 +28,6 @@ export function formatDuration(seconds: number): string {
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-export function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—';
-  try {
     return new Date(dateStr).toISOString().split('T')[0];
   } catch {
     return dateStr;
