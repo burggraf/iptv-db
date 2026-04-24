@@ -84,13 +84,17 @@ export default function SourceDetail() {
       }
       // Generate the M3U file
       // Generate M3U file via worker (faster for large datasets)
-      const genRes = await fetch('/worker/api/m3u/generate', {
+      const genRes = await fetch('/api/playlist/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: newSlug.trim() }),
       });
       if (!genRes.ok) {
-        console.error('Failed to generate M3U file');
+        const err = await genRes.json();
+        console.error('Failed to generate M3U file:', err.message);
+        setCreateError(err.message || 'Failed to generate');
+        setCreating(false);
+        return;
       }
       setCreateOpen(false);
       setNewName('');
@@ -114,7 +118,7 @@ export default function SourceDetail() {
       const pl = myPlaylists.find(p => p.id === playlistId);
       if (pl) {
         // Delete M3U file via worker
-        await fetch('/worker/api/m3u/delete', {
+        await fetch('/api/playlist/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ slug: pl.slug }),
