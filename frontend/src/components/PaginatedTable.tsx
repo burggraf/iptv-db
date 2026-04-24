@@ -32,6 +32,12 @@ interface PaginatedTableProps<T> {
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
   renderRow?: (item: T) => React.ReactNode;
+  /** Enable checkbox selection column */
+  selectable?: boolean;
+  /** Currently selected IDs */
+  selectedIds?: Set<string>;
+  /** Toggle selection for an ID */
+  onToggle?: (id: string) => void;
 }
 
 export default function PaginatedTable<T extends { id: string }>({
@@ -46,6 +52,9 @@ export default function PaginatedTable<T extends { id: string }>({
   onRowClick,
   emptyMessage = 'No records found.',
   renderRow,
+  selectable = false,
+  selectedIds = new Set(),
+  onToggle,
 }: PaginatedTableProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [page, setPage] = useState(1);
@@ -57,16 +66,13 @@ export default function PaginatedTable<T extends { id: string }>({
   const [currentSort, setCurrentSort] = useState(sort);
   const [currentFilter, setCurrentFilter] = useState(filter);
 
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Apply search to filter
   useEffect(() => {
     if (debouncedSearch) {
-      // Search across name field (common to most collections)
       setCurrentFilter(`${filter} && name ~ "${debouncedSearch}"`);
     } else {
       setCurrentFilter(filter);
@@ -105,6 +111,22 @@ export default function PaginatedTable<T extends { id: string }>({
     setCurrentSort(newSort);
   };
 
+  // Selection helpers
+  const pageIds = items.map(rowKey);
+  const allPageSelected = selectable && items.length > 0 && pageIds.every(id => selectedIds.has(id));
+  const somePageSelected = selectable && pageIds.some(id => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (!onToggle) return;
+    if (allPageSelected) {
+      for (const id of pageIds) onToggle(id);
+    } else {
+      for (const id of pageIds) {
+        if (!selectedIds.has(id)) onToggle(id);
+      }
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Search bar */}
@@ -124,6 +146,17 @@ export default function PaginatedTable<T extends { id: string }>({
       <Table>
         <TableHeader>
           <TableRow>
+            {selectable && (
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  ref={el => { if (el) el.indeterminate = somePageSelected && !allPageSelected; }}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </TableHead>
+            )}
             {columns.map((col, i) => (
               <TableHead
                 key={i}
@@ -140,34 +173,47 @@ export default function PaginatedTable<T extends { id: string }>({
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={columns.length + (selectable ? 1 : 0)} className="h-24 text-center text-muted-foreground">
                 Loading...
               </TableCell>
             </TableRow>
           ) : items.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={columns.length + (selectable ? 1 : 0)} className="h-24 text-center text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>
           ) : (
-            items.map((item) =>
-              renderRow ? (
-                renderRow(item)
-              ) : (
+            items.map((item) => {
+              const id = rowKey(item);
+              const checked = selectedIds.has(id);
+              if (renderRow) {
+                return renderRow(item);
+              }
+              return (
                 <TableRow
-                  key={rowKey(item)}
-                  className={onRowClick ? 'cursor-pointer' : ''}
+                  key={id}
+                  className={cn(onRowClick ? 'cursor-pointer' : '', checked && 'bg-muted/50')}
                   onClick={() => onRowClick?.(item)}
                 >
+                  {selectable && onToggle && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => onToggle(id)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    </TableCell>
+                  )}
                   {columns.map((col, i) => (
                     <TableCell key={i} className={col.className}>
                       {col.accessor(item)}
                     </TableCell>
                   ))}
                 </TableRow>
-              ),
-            )
+              );
+            })
           )}
         </TableBody>
       </Table>
@@ -192,7 +238,6 @@ export default function PaginatedTable<T extends { id: string }>({
   );
 }
 
-// cn helper inline (to avoid import cycle)
 function cn(...inputs: (string | false | undefined | null)[]) {
   return inputs.filter(Boolean).join(' ');
 }

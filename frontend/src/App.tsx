@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
+import { ChannelSelectionProvider } from './hooks/useChannelSelection';
 import { isAuthenticated } from './lib/pocketbase';
 import AppLayout from './components/AppLayout';
 import LoginPage from './components/LoginPage';
@@ -36,7 +37,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <ChannelSelectionProvider>
+        <AppRoutes />
+      </ChannelSelectionProvider>
     </AuthProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { pb, isAbortError } from '../lib/pocketbase';
 import type { Source, SyncJob, Category, Channel } from '../types/database';
@@ -7,9 +7,11 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
-import { Trash2, MoreVertical } from 'lucide-react';
+import { Trash2, MoreVertical, RefreshCw } from 'lucide-react';
 import ChannelDetailModal from '../components/ChannelDetailModal';
 import PaginatedTable, { type Column } from '../components/PaginatedTable';
+import BatchActionsBar from '../components/BatchActionsBar';
+import { useChannelSelection } from '../hooks/useChannelSelection';
 
 export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +24,14 @@ export default function SourceDetail() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState('');
   const navigate = useNavigate();
+
+  const { selectedIds, toggle, clear } = useChannelSelection();
+
+  // Refresh key to force PaginatedTable reload after batch operations
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleBatchSuccess = useCallback(() => {
+    setRefreshKey(k => k + 1);
+  }, []);
 
   // Settings menu
   const [menuOpen, setMenuOpen] = useState(false);
@@ -50,6 +60,17 @@ export default function SourceDetail() {
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Delete failed');
       setDeleting(false);
+    }
+  };
+
+  // Trigger sync
+  const handleSync = async () => {
+    if (!id) return;
+    try {
+      await pb.collection('sync_jobs').create({ source_id: id });
+      setIsSyncing(true);
+    } catch (err) {
+      console.error('Failed to start sync:', err);
     }
   };
 
@@ -151,6 +172,14 @@ export default function SourceDetail() {
                 </Badge>
               )}
               <Badge variant="secondary">{source.type}</Badge>
+              {!isSyncing && (
+                <button
+                  onClick={handleSync}
+                  className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-background px-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Sync
+                </button>
+              )}
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
@@ -246,11 +275,15 @@ export default function SourceDetail() {
         </CardHeader>
         <CardContent>
           <PaginatedTable<Channel>
+            key={refreshKey}
             pb={pb}
             collection="channels"
             filter={channelFilter}
             sort="name"
             perPage={50}
+            selectable
+            selectedIds={selectedIds}
+            onToggle={toggle}
             onRowClick={(ch) => setSelectedChannelId(ch.id)}
             emptyMessage="No channels found."
             columns={liveChannelColumns}
@@ -263,6 +296,9 @@ export default function SourceDetail() {
       </Link>
 
       <ChannelDetailModal channelId={selectedChannelId} onClose={() => setSelectedChannelId(null)} />
+
+      {/* Batch actions floating bar */}
+      <BatchActionsBar onSuccess={handleBatchSuccess} />
 
       {/* Delete confirmation dialog */}
       {deleteOpen && (
