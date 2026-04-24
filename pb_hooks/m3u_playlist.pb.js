@@ -16,8 +16,7 @@ routerAdd("POST", "/api/playlist/generate", (e) => {
         if (res.statusCode !== 200) {
             return e.json(500, { message: "Worker error: " + res.statusCode });
         }
-        var workerRes = JSON.parse(res.body);
-        return e.json(200, { message: "ok", url: workerRes.url || "/" + slug + ".m3u" });
+        return e.json(200, { message: "ok", url: "/" + slug + ".m3u" });
     } catch (err) {
         return e.json(500, { message: "error: " + err });
     }
