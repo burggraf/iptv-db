@@ -38,16 +38,21 @@ export function formatDate(dateStr: string | null | undefined): string {
   }
 }
 
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr).toISOString().split('T')[0];
+  } catch {
+    return dateStr;
+  }
+}
+
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const d = new Date(dateStr);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   } catch {
     return dateStr;
   }

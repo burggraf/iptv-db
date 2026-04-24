@@ -9,7 +9,7 @@ import { Input } from '../components/ui/input';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
-import { formatDateTime } from '../lib/utils';
+import { formatDateTime, formatDate } from '../lib/utils';
 import { ChevronDown, Trash2, RefreshCw } from 'lucide-react';
 
 const PAGE_SIZE = 100;
@@ -455,7 +455,7 @@ export default function Dashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>{s.max_connections ?? '-'}</TableCell>
-                      <TableCell>{formatDateTime(s.expiry_date)}</TableCell>
+                      <TableCell>{formatDate(s.expiry_date)}</TableCell>
                       <TableCell>{counts[s.id]?.channels ?? '-'}</TableCell>
                       <TableCell>{counts[s.id]?.movies ?? '-'}</TableCell>
                       <TableCell>{counts[s.id]?.series ?? '-'}</TableCell>
