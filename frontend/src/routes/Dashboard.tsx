@@ -10,7 +10,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
 import { formatDateTime, formatDate } from '../lib/utils';
-import { ChevronDown, Trash2, RefreshCw } from 'lucide-react';
+import { ChevronDown, Trash2, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 const PAGE_SIZE = 100;
 const WORKER_BASE = '/worker';
@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -94,6 +96,41 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
+  const columnToField: Record<string, string> = {
+    name: 'name',
+    type: 'type',
+    status: 'status',
+    connections: 'max_connections',
+    expiry: 'expiry_date',
+    channels: 'channel_count',
+    movies: 'movie_count',
+    series: 'series_count',
+    last_sync: 'last_sync',
+  };
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (column: string) => {
+    if (sortColumn !== column) return <ArrowUpDown className="inline h-3.5 w-3.5 ml-1 text-muted-foreground" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="inline h-3.5 w-3.5 ml-1" />
+      : <ArrowDown className="inline h-3.5 w-3.5 ml-1" />;
+  };
+
+  const getSortParam = (): string | undefined => {
+    if (!sortColumn) return '-created';
+    const field = columnToField[sortColumn];
+    if (!field) return '-created';
+    return sortDirection === 'asc' ? field : `-${field}`;
+  };
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -104,7 +141,7 @@ export default function Dashboard() {
         }
         const res = await pb.collection('sources').getList<Source>(page, PAGE_SIZE, {
           filter,
-          sort: '-created',
+          sort: getSortParam(),
         });
         if (!cancelled) {
           setSources(res.items);
@@ -117,7 +154,7 @@ export default function Dashboard() {
     };
     load();
     return () => { cancelled = true; };
-  }, [search, page]);
+  }, [search, page, sortColumn, sortDirection]);
 
   const loadActiveJobs = async () => {
     try {
@@ -381,15 +418,15 @@ export default function Dashboard() {
                       className="h-4 w-4 rounded border-input cursor-pointer accent-primary"
                     />
                   </TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Connections</TableHead>
-                  <TableHead>Expiry</TableHead>
-                  <TableHead>Channels</TableHead>
-                  <TableHead>Movies</TableHead>
-                  <TableHead>Series</TableHead>
-                  <TableHead>Last Sync</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('name')}>Name{getSortIcon('name')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('type')}>Type{getSortIcon('type')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('status')}>Status{getSortIcon('status')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('connections')}>Connections{getSortIcon('connections')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('expiry')}>Expiry{getSortIcon('expiry')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('channels')}>Channels{getSortIcon('channels')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('movies')}>Movies{getSortIcon('movies')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('series')}>Series{getSortIcon('series')}</TableHead>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => handleSort('last_sync')}>Last Sync{getSortIcon('last_sync')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
