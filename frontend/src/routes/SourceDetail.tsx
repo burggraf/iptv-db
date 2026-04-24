@@ -6,24 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
-import { Input } from '../components/ui/input';
-import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-} from '../components/ui/table';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
 import ChannelDetailModal from '../components/ChannelDetailModal';
+import PaginatedTable, { type Column } from '../components/PaginatedTable';
 
 export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
   const [source, setSource] = useState<Source | null>(null);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
   const [selectedLiveCat, setSelectedLiveCat] = useState('');
-  const [liveChannels, setLiveChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [channelFilter, setChannelFilter] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -53,24 +49,10 @@ export default function SourceDetail() {
 
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
-    const load = async () => {
-      const filterParts = [`source_id="${id}"`, 'available=true'];
-      if (selectedLiveCat) filterParts.push(`category_id="${selectedLiveCat}"`);
-      if (search) filterParts.push(`name ~ "${search}"`);
-      try {
-        const res = await pb.collection('channels').getList<Channel>(1, 100, {
-          filter: filterParts.join(' && '),
-          sort: 'name',
-        });
-        if (!cancelled) setLiveChannels(res.items);
-      } catch (err) {
-        if (isAbortError(err)) return;
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [id, selectedLiveCat, search]);
+    const parts = [`source_id="${id}"`, 'available=true'];
+    if (selectedLiveCat) parts.push(`category_id="${selectedLiveCat}"`);
+    setChannelFilter(parts.join(' && '));
+  }, [id, selectedLiveCat]);
 
   useEffect(() => {
     if (!id) return;
@@ -92,6 +74,23 @@ export default function SourceDetail() {
     });
     return () => { unsub.then((u: () => void) => u()); };
   }, [id]);
+
+  const liveChannelColumns: Column<Channel>[] = [
+    {
+      header: 'Name',
+      accessor: (ch) => (
+        <span className="flex items-center gap-2">
+          {(() => { const logoUrl = proxyImageUrl(ch.logo); return logoUrl ? <img src={logoUrl} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} /> : null; })()}
+          {ch.name}
+        </span>
+      ),
+      sortable: true,
+      sortKey: 'name',
+    },
+    { header: 'Country', accessor: (ch) => ch.tvg_country || '—', sortable: true, sortKey: 'tvg_country' },
+    { header: 'EPG ID', accessor: (ch) => ch.epg_id || '—' },
+    { header: 'Added', accessor: (ch) => ch.added || '—', sortable: true, sortKey: 'added' },
+  ];
 
   if (loading) return <div className="text-muted-foreground">Loading...</div>;
   if (!source) return <div className="text-muted-foreground">Source not found.</div>;
@@ -183,12 +182,6 @@ export default function SourceDetail() {
         <CardHeader>
           <div className="flex items-center gap-3">
             <CardTitle>Live Channels</CardTitle>
-            <Input
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-48"
-            />
             <Select
               value={selectedLiveCat}
               onChange={(e) => setSelectedLiveCat(e.target.value)}
@@ -202,32 +195,16 @@ export default function SourceDetail() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {['Name', 'Country', 'EPG ID', 'Added'].map((h) => <TableHead key={h}>{h}</TableHead>)}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {liveChannels.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No items found.</TableCell></TableRow>
-              ) : (
-                liveChannels.map((ch) => (
-                  <TableRow key={ch.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedChannelId(ch.id)}>
-                    <TableCell>
-                      <span className="flex items-center gap-2">
-                        {(() => { const logoUrl = proxyImageUrl(ch.logo); return logoUrl ? <img src={logoUrl} alt="" className="w-5 h-5 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} /> : null; })()}
-                        {ch.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>{ch.tvg_country || '—'}</TableCell>
-                    <TableCell>{ch.epg_id || '—'}</TableCell>
-                    <TableCell>{ch.added || '—'}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <PaginatedTable<Channel>
+            pb={pb}
+            collection="channels"
+            filter={channelFilter}
+            sort="name"
+            perPage={50}
+            onRowClick={(ch) => setSelectedChannelId(ch.id)}
+            emptyMessage="No channels found."
+            columns={liveChannelColumns}
+          />
         </CardContent>
       </Card>
 
