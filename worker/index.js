@@ -2,6 +2,8 @@ import PocketBase from 'pocketbase';
 import { scrape } from './scraper.js';
 import { SyncEngine } from './sync-engine.js';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 // Load env (optional — works without it too)
 try { dotenv.config({ path: '../.env' }); } catch {}
@@ -65,6 +67,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/scrape') {
     await handleScrape(req, res);
+  } else if (req.method === 'POST' && url.pathname === '/api/m3u/generate') {
+    await handleM3uGenerate(req, res);
+  } else if (req.method === 'POST' && url.pathname === '/api/m3u/delete') {
+    await handleM3uDelete(req, res);
   } else if (req.method === 'POST' && url.pathname === '/api/sync') {
     await handleSync(req, res);
   } else if (req.method === 'POST' && url.pathname.startsWith('/api/sync/')) {
@@ -84,6 +90,119 @@ const server = http.createServer(async (req, res) => {
     res.end('Not found');
   }
 });
+
+async function handleM3uGenerate(req, res) {
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  await new Promise((resolve) => req.on('end', resolve));
+  let slug;
+  try { slug = JSON.parse(body).slug; } catch {
+    res.writeHead(400); return res.end('Missing slug');
+  }
+  if (!slug) { res.writeHead(400); return res.end('Missing slug'); }
+
+  try {
+    const playlist = await pb.collection('m3u_playlists').getFirstListItem(`slug="${slug}"`);
+    const source = await pb.collection('sources').getOne(playlist.source_id);
+    const baseUrl = (source.base_url || '').replace(/\/+$/, '');
+    const username = source.username || '';
+    const password = source.password || '';
+
+    let m3u = '#EXTM3U\n';
+    const CONC = 5;
+
+    if (playlist.include_live) {
+      const cats = await pb.collection('categories').getFullList({
+        filter: `source_id="${playlist.source_id}" && type="live"`, sort: 'name'
+      });
+      const catMap = {};
+      cats.forEach(c => { catMap[c.id] = c.name; });
+
+      // Fetch channels in batches
+      let page = 1;
+      let totalChannels = 0;
+      while (true) {
+        const batch = await pb.collection('channels').getList(page, 500, {
+          filter: `source_id="${playlist.source_id}" && available=true`, sort: 'name'
+        });
+        for (const ch of batch.items) {
+          let line = '#EXTINF:-1';
+          if (ch.tvg_id) line += ` tvg-id="${ch.tvg_id}"`;
+          if (ch.logo) line += ` tvg-logo="${ch.logo}"`;
+          if (ch.tvg_country) line += ` tvg-country="${ch.tvg_country}"`;
+          const grp = catMap[ch.category_id] || '';
+          if (grp) line += ` group-title="${grp}"`;
+          line += `,${ch.name}\n`;
+          line += `${baseUrl}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${ch.stream_id}.m3u8\n`;
+          m3u += line;
+        }
+        totalChannels += batch.items.length;
+        if (page >= batch.totalPages) break;
+        page++;
+      }
+      console.log(`[m3u] ${totalChannels} live channels for ${slug}`);
+    }
+
+    if (playlist.include_vod) {
+      const cats = await pb.collection('categories').getFullList({
+        filter: `source_id="${playlist.source_id}" && type="vod"`, sort: 'name'
+      });
+      const catMap = {};
+      cats.forEach(c => { catMap[c.id] = c.name; });
+
+      let page = 1;
+      let totalMovies = 0;
+      while (true) {
+        const batch = await pb.collection('movies').getList(page, 500, {
+          filter: `source_id="${playlist.source_id}" && available=true`, sort: 'name'
+        });
+        for (const mv of batch.items) {
+          let line = '#EXTINF:-1';
+          if (mv.poster) line += ` tvg-logo="${mv.poster}"`;
+          const grp = catMap[mv.category_id] || 'Movies';
+          line += ` group-title="${grp}"`;
+          line += `,${mv.name}\n`;
+          line += `${baseUrl}/movie/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${mv.stream_id}.mp4\n`;
+          m3u += line;
+        }
+        totalMovies += batch.items.length;
+        if (page >= batch.totalPages) break;
+        page++;
+      }
+      console.log(`[m3u] ${totalMovies} movies for ${slug}`);
+    }
+
+    // Write to pb_public
+    const pbDir = path.join(new URL('.', import.meta.url).pathname, '..', 'pb_public');
+    if (!fs.existsSync(pbDir)) fs.mkdirSync(pbDir, { recursive: true });
+    fs.writeFileSync(path.join(pbDir, `${slug}.m3u`), m3u, 'utf8');
+    console.log(`[m3u] Written /${slug}.m3u`);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: 'ok', url: `/${slug}.m3u` }));
+  } catch (err) {
+    console.error(`[m3u] Error:`, err.message);
+    res.writeHead(500); res.end(err.message);
+  }
+}
+
+async function handleM3uDelete(req, res) {
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  await new Promise((resolve) => req.on('end', resolve));
+  let slug;
+  try { slug = JSON.parse(body).slug; } catch {
+    res.writeHead(400); return res.end('Missing slug');
+  }
+  if (!slug) { res.writeHead(400); return res.end('Missing slug'); }
+  try {
+    const filePath = path.join(new URL('.', import.meta.url).pathname, '..', 'pb_public', `${slug}.m3u`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    res.writeHead(200); res.end('ok');
+  } catch (err) {
+    res.writeHead(500); res.end(err.message);
+  }
+}
 
 async function handleScrape(req, res) {
   let body = '';
