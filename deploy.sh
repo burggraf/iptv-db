@@ -70,10 +70,14 @@ echo "✓ Deploy files synced"
 ssh "$SSH_HOST" "
 cp $REMOTE_BASE/deploy/iptv-pb.service /etc/systemd/system/iptv-pb.service
 cp $REMOTE_BASE/deploy/iptv-worker.service /etc/systemd/system/iptv-worker.service
+if [ -f $REMOTE_BASE/deploy/iptv ]; then
+  cp $REMOTE_BASE/deploy/iptv /etc/nginx/sites-available/iptv
+  nginx -t && systemctl reload nginx
+fi
 systemctl daemon-reload
 systemctl enable iptv-pb.service iptv-worker.service
 "
-echo "✓ systemd services installed and enabled"
+echo "✓ systemd services and nginx installed"
 
 # 7. Sync migrations
 echo "→ Syncing migrations..."
