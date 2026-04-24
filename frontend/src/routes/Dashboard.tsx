@@ -307,7 +307,7 @@ export default function Dashboard() {
                 {sources.filter(s => activeJobs[s.id] || syncing[s.id]).map((s) => {
                   const job = activeJobs[s.id];
                   return (
-                    <TableRow key={s.id}>
+                    <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleRowClick(s)}>
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
                       <TableCell>
@@ -331,7 +331,7 @@ export default function Dashboard() {
                           <span className="text-muted-foreground">Starting...</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
                         <Button
                           variant="outline"
                           size="sm"
