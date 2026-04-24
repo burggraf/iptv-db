@@ -26,6 +26,25 @@ try {
   }
 } catch {}
 
+// Clean up orphaned jobs from previous worker run
+try {
+  const orphaned = await pb.collection('sync_jobs').getFullList({
+    filter: 'status="running" || status="queued"',
+  });
+  if (orphaned.length > 0) {
+    console.log(`[worker] Cleaning up ${orphaned.length} orphaned job(s) from previous run`);
+    await Promise.all(orphaned.map(j =>
+      pb.collection('sync_jobs').update(j.id, {
+        status: 'failed',
+        error: 'Worker restarted — job orphaned',
+        phase: 'Orphaned by restart',
+      })
+    ));
+  }
+} catch (err) {
+  console.warn('[worker] Failed to clean up orphaned jobs:', err.message);
+}
+
 // Initialize sync engine
 const syncEngine = new SyncEngine(pb, { concurrency: SYNC_CONCURRENCY });
 

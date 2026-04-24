@@ -232,6 +232,22 @@ export default function Dashboard() {
     }
   };
 
+  const handleSyncAll = async () => {
+    for (const s of sources.filter((s) => s.status !== 'error')) {
+      handleSync(s.id);
+    }
+  };
+
+  const handleCancelAll = async () => {
+    for (const s of sources) {
+      if (activeJobs[s.id] || syncing[s.id]) {
+        handleCancel(s.id);
+      }
+    }
+  };
+
+  const hasActiveSyncs = Object.keys(activeJobs).length > 0 || Object.values(syncing).some(Boolean);
+
   const handleRowClick = (source: Source) => {
     navigate(`/app/dashboard/${source.id}`);
   };
@@ -251,6 +267,87 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">
           {stats.sources.toLocaleString()} source{stats.sources !== 1 ? 's' : ''} · {stats.channels.toLocaleString()} channels · {stats.movies.toLocaleString()} movies · {stats.series.toLocaleString()} series · {stats.episodes.toLocaleString()} episodes
         </p>
+      )}
+
+      {/* Sync status - only shown when sources are actively syncing */}
+      {hasActiveSyncs && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Sync Status</CardTitle>
+              <p className="text-sm text-muted-foreground">Active sync jobs across all sources.</p>
+            </div>
+            <div className="flex gap-2">
+              {(() => {
+                const runningCount = sources.filter(s => activeJobs[s.id] || syncing[s.id]).length;
+                return runningCount > 0 ? (
+                  <Button variant="outline" size="sm" onClick={handleCancelAll}>
+                    Cancel All ({runningCount})
+                  </Button>
+                ) : null;
+              })()}
+              <Button size="sm" onClick={handleSyncAll} disabled={sources.length === 0}>
+                Sync All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Sync</TableHead>
+                  <TableHead>Sync Progress</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sources.filter(s => activeJobs[s.id] || syncing[s.id]).map((s) => {
+                  const job = activeJobs[s.id];
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell><Badge variant="secondary">{s.type}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={s.status === 'active' ? 'success' : s.status === 'error' ? 'destructive' : 'secondary'}>
+                          {s.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDateTime(s.last_sync)}</TableCell>
+                      <TableCell className="text-sm">
+                        {job ? (
+                          <div className="w-40">
+                            <span className="text-xs text-muted-foreground">{job.phase}</span>
+                            <div className="h-1.5 mt-1 w-full overflow-hidden rounded-full bg-secondary">
+                              <div
+                                className="h-full bg-primary transition-all"
+                                style={{ width: `${job.progress || 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Starting...</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => handleCancel(s.id)}
+                        >
+                          Cancel
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {/* Sources list */}

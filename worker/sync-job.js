@@ -257,7 +257,7 @@ async function syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCanc
     });
 
     if (i % step === 0) {
-      onProgress(`Preparing channels ${i}/${total}...`, 15 + Math.floor((i / total) * 30));
+      onProgress(`Preparing channels: ${i + 1}/${total}...`, 15 + Math.floor((i / total) * 30));
       checkCancelled(isCancelled);
     }
   }

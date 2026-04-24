@@ -198,7 +198,7 @@ export class XtreamClient {
       }
       completed += batch.length;
       if (onProgress) {
-        onProgress(`Fetching live streams ${completed}/${total}...`, 15 + Math.floor((completed / total) * 25));
+        onProgress(`Fetching live streams: ${completed}/${total} categories...`, 15 + Math.floor((completed / total) * 25));
       }
     }
     console.log(`[xtream] Per-category fetch: ${allStreams.length} streams from ${total} categories`);
