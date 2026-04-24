@@ -25,7 +25,6 @@ export default function Dashboard() {
     episodes: 0,
   });
   const [sources, setSources] = useState<Source[]>([]);
-  const [counts, setCounts] = useState<Record<string, { channels: number; movies: number; series: number }>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -64,24 +63,24 @@ export default function Dashboard() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingChecked, setDeletingChecked] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const [countsLoading, setCountsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [sourcesRes, channelsRes, moviesRes, seriesRes] = await Promise.all([
-          pb.collection('sources').getList(1, 1, { filter: '1=1' }),
-          pb.collection('channels').getList(1, 1, { filter: 'available = true' }),
-          pb.collection('movies').getList(1, 1, { filter: 'available = true' }),
-          pb.collection('series').getList(1, 1, { filter: 'available = true' }),
-        ]);
+        const allSources = await pb.collection('sources').getFullList<Source>({ batch: 500 });
         if (!cancelled) {
+          let totalChannels = 0, totalMovies = 0, totalSeries = 0;
+          for (const s of allSources) {
+            totalChannels += s.channel_count || 0;
+            totalMovies += s.movie_count || 0;
+            totalSeries += s.series_count || 0;
+          }
           setStats({
-            sources: sourcesRes.totalItems,
-            channels: channelsRes.totalItems,
-            movies: moviesRes.totalItems,
-            series: seriesRes.totalItems,
+            sources: allSources.length,
+            channels: totalChannels,
+            movies: totalMovies,
+            series: totalSeries,
             episodes: 0,
           });
         }
@@ -119,36 +118,6 @@ export default function Dashboard() {
     load();
     return () => { cancelled = true; };
   }, [search, page]);
-
-  useEffect(() => {
-    if (sources.length === 0) {
-      setCounts({});
-      return;
-    }
-    let cancelled = false;
-    const loadCounts = async () => {
-      setCountsLoading(true);
-      const newCounts: Record<string, { channels: number; movies: number; series: number }> = {};
-      await Promise.all(
-        sources.map(async (s) => {
-          try {
-            const [ch, mv, sr] = await Promise.all([
-              pb.collection('channels').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
-              pb.collection('movies').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
-              pb.collection('series').getList(1, 1, { filter: `source_id="${s.id}" && available=true` }),
-            ]);
-            newCounts[s.id] = { channels: ch.totalItems, movies: mv.totalItems, series: sr.totalItems };
-          } catch { /* skip */ }
-        }),
-      );
-      if (!cancelled) {
-        setCounts(newCounts);
-        setCountsLoading(false);
-      }
-    };
-    loadCounts();
-    return () => { cancelled = true };
-  }, [sources]);
 
   const loadActiveJobs = async () => {
     try {
@@ -456,9 +425,9 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell>{s.max_connections ?? '-'}</TableCell>
                       <TableCell>{formatDate(s.expiry_date)}</TableCell>
-                      <TableCell>{counts[s.id]?.channels ?? '-'}</TableCell>
-                      <TableCell>{counts[s.id]?.movies ?? '-'}</TableCell>
-                      <TableCell>{counts[s.id]?.series ?? '-'}</TableCell>
+                      <TableCell>{s.channel_count ?? '-'}</TableCell>
+                      <TableCell>{s.movie_count ?? '-'}</TableCell>
+                      <TableCell>{s.series_count ?? '-'}</TableCell>
                       <TableCell>{formatDateTime(s.last_sync)}</TableCell>
                     </TableRow>
                   ))
