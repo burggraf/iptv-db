@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter } from '../components/ui/dialog';
 import { formatDateTime, formatDate, proxyImageUrl } from '../lib/utils';
 import { Trash2, MoreVertical, RefreshCw, Copy, Check, ListMusic, Plus } from 'lucide-react';
@@ -14,12 +15,43 @@ import PaginatedTable, { type Column } from '../components/PaginatedTable';
 import BatchActionsBar from '../components/BatchActionsBar';
 import { useChannelSelection } from '../hooks/useChannelSelection';
 
+/**
+ * Simple category list component for displaying categories in a grid.
+ */
+function CategoryList({ categories }: { categories: Category[] }) {
+  if (categories.length === 0) {
+    return <p className="text-sm text-muted-foreground">No categories found.</p>;
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {categories.map((cat) => (
+        <div
+          key={cat.id}
+          className="rounded-lg border bg-card p-3 text-sm shadow-sm"
+        >
+          <div className="font-medium truncate" title={cat.name}>
+            {cat.name}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            ID: {cat.category_id}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SourceDetail() {
   const { id } = useParams<{ id: string }>();
   const [source, setSource] = useState<Source | null>(null);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
+  const [vodCategories, setVodCategories] = useState<Category[]>([]);
+  const [seriesCategories, setSeriesCategories] = useState<Category[]>([]);
   const [selectedLiveCat, setSelectedLiveCat] = useState('');
   const [loading, setLoading] = useState(true);
+  const [mainTab, setMainTab] = useState<'channels' | 'categories'>('channels');
+  const [catTab, setCatTab] = useState<'live' | 'vod' | 'series'>('live');
   const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
@@ -228,11 +260,26 @@ export default function SourceDetail() {
 
         const headers: Record<string, string> = {};
         if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
-        const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="live"`)}`;
-        const res = await fetch(url, { headers });
-        if (!res.ok) throw new Error(`Failed to fetch live categories: ${res.status}`);
-        const data = await res.json();
-        if (!cancelled) setLiveCategories(data.items as Category[]);
+        
+        const [liveRes, vodRes, seriesRes] = await Promise.all([
+          fetch(`/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="live"`)}`, { headers }),
+          fetch(`/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="vod"`)}`, { headers }),
+          fetch(`/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="series"`)}`, { headers }),
+        ]);
+
+        if (!liveRes.ok) throw new Error(`Failed to fetch live categories: ${liveRes.status}`);
+        const liveData = await liveRes.json();
+        if (!cancelled) setLiveCategories(liveData.items as Category[]);
+
+        if (vodRes.ok) {
+          const vodData = await vodRes.json();
+          if (!cancelled) setVodCategories(vodData.items as Category[]);
+        }
+
+        if (seriesRes.ok) {
+          const seriesData = await seriesRes.json();
+          if (!cancelled) setSeriesCategories(seriesData.items as Category[]);
+        }
       } catch (err) {
         if (!isAbortError(err)) console.error(err);
       } finally {
@@ -479,40 +526,88 @@ export default function SourceDetail() {
         <span><span className="font-semibold">{source.series_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Series</span></span>
       </div>
 
-      {/* Live channels */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <CardTitle>Live Channels</CardTitle>
-            <Select
-              value={selectedLiveCat}
-              onChange={(e) => setSelectedLiveCat(e.target.value)}
-              className="w-64"
-            >
-              <option value="">All Categories</option>
-              {liveCategories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <PaginatedTable<Channel>
-            key={refreshKey}
-            pb={pb}
-            collection="channels"
-            filter={channelFilter}
-            sort="name"
-            perPage={50}
-            selectable
-            selectedIds={selectedIds}
-            onToggle={toggle}
-            onRowClick={(ch) => setSelectedChannelId(ch.id)}
-            emptyMessage="No channels found."
-            columns={liveChannelColumns}
-          />
-        </CardContent>
-      </Card>
+      {/* Main Tabs: Channels vs Categories */}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'channels' | 'categories')}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="channels">Channels</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+        </TabsList>
+
+        {/* Channels Tab */}
+        <TabsContent value="channels">
+          <Card className="mt-4">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <CardTitle>Live Channels</CardTitle>
+                <Select
+                  value={selectedLiveCat}
+                  onChange={(e) => setSelectedLiveCat(e.target.value)}
+                  className="w-64"
+                >
+                  <option value="">All Categories</option>
+                  {liveCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <PaginatedTable<Channel>
+                key={refreshKey}
+                pb={pb}
+                collection="channels"
+                filter={channelFilter}
+                sort="name"
+                perPage={50}
+                selectable
+                selectedIds={selectedIds}
+                onToggle={toggle}
+                onRowClick={(ch) => setSelectedChannelId(ch.id)}
+                emptyMessage="No channels found."
+                columns={liveChannelColumns}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Categories Tab */}
+        <TabsContent value="categories">
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Categories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Sub-tabs for category types - only show if we have those categories */}
+              {(vodCategories.length > 0 || seriesCategories.length > 0) ? (
+                <Tabs value={catTab} onValueChange={(v) => setCatTab(v as 'live' | 'vod' | 'series')}>
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="live">Live TV ({liveCategories.length})</TabsTrigger>
+                    {vodCategories.length > 0 && (
+                      <TabsTrigger value="vod">Movies ({vodCategories.length})</TabsTrigger>
+                    )}
+                    {seriesCategories.length > 0 && (
+                      <TabsTrigger value="series">Series ({seriesCategories.length})</TabsTrigger>
+                    )}
+                  </TabsList>
+
+                  <TabsContent value="live">
+                    <CategoryList categories={liveCategories} />
+                  </TabsContent>
+                  <TabsContent value="vod">
+                    <CategoryList categories={vodCategories} />
+                  </TabsContent>
+                  <TabsContent value="series">
+                    <CategoryList categories={seriesCategories} />
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                /* Only live categories exist, no sub-tabs needed */
+                <CategoryList categories={liveCategories} />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Link to="/app/dashboard">
         <Button variant="outline">← Back to Dashboard</Button>
