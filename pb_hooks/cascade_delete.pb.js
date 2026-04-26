@@ -12,18 +12,18 @@ routerAdd('POST', '/api/cascade-delete', (c) => {
     
     // Delete sources in batches - PocketBase cascades to channels, movies, series, episodes, categories via foreign keys
     let totalDeleted = 0;
-    let page = 1;
     
     while (true) {
-      const sources = app.findRecordsByFilter('sources', '1=1', { page: page, perPage: BATCH_SIZE });
-      if (sources.length === 0) break;
+      const result = app.dao().db().newQuery(`SELECT id FROM sources LIMIT ${BATCH_SIZE}`).all();
+      if (result.length === 0) break;
       
-      for (const src of sources) {
-        app.delete(src);
-        totalDeleted++;
+      for (const row of result) {
+        const src = app.findRecordById('sources', row.id);
+        if (src) {
+          app.delete(src);
+          totalDeleted++;
+        }
       }
-      
-      page++;
     }
     
     return c.json(200, { 
