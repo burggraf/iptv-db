@@ -11,10 +11,7 @@ const BLOCKED_CODES = new Set([403, 429, 503]);
 const torAgent = new SocksProxyAgent(TOR_SOCKS);
 
 /**
- * Fetch with Tor fallback. Direct first → on HTTP block (403/429/503) → retry via Tor.
- *
- * Network errors (DNS failure, ECONNRESET, timeout) are NOT retried via Tor —
- * Tor cannot fix a domain that doesn't resolve or a server that's down.
+ * Fetch with Tor fallback. Direct first → on failure → retry via Tor.
  *
  * @param {string} url
  * @param {object} opts - Standard fetch options (headers, method, body, etc.)
@@ -36,15 +33,12 @@ export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
   } = torOpts;
 
   // ── Attempt 1: Direct ──
-  let isBlocked = false;
-  let directErr;
   try {
     const res = await fetch(url, {
       ...opts,
       signal: opts.signal ?? AbortSignal.timeout(directTimeout),
     });
     if (!res.ok && BLOCKED_CODES.has(res.status)) {
-      isBlocked = true;
       throw new Error(`Blocked: HTTP ${res.status}`);
     }
     if (json) {
@@ -52,15 +46,8 @@ export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
       return { ok: true, data };
     }
     return res;
-  } catch (err) {
-    directErr = err;
-    console.log(`[tor] Direct failed → ${err.message}${isBlocked ? ' (BLOCKED)' : ''}`);
-  }
-
-  // ── Only fall back to Tor for HTTP block errors ──
-  // DNS failures, ECONNRESET, timeouts, etc. won't be fixed by Tor
-  if (!isBlocked) {
-    throw directErr;
+  } catch (directErr) {
+    console.log(`[tor] Direct failed → ${directErr.message}`);
   }
 
   // ── Optional: Rotate Tor circuit before retry ──
@@ -74,32 +61,31 @@ export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
   }
 
   // ── Attempt 2: Via Tor ──
-  try {
-    const torRes = await fetch(url, {
-      ...opts,
-      agent: torAgent,
-      signal: opts.signal ?? AbortSignal.timeout(torTimeout),
-    });
+  const torRes = await fetch(url, {
+    ...opts,
+    agent: torAgent,
+    signal: opts.signal ?? AbortSignal.timeout(torTimeout),
+  });
 
-    if (json) {
-      if (!torRes.ok) {
-        throw new Error(`Tor fetch failed: HTTP ${torRes.status} ${torRes.statusText}`);
-      }
-      const data = await torRes.json();
-      return { ok: true, data };
-    }
-
+  if (json) {
     if (!torRes.ok) {
       throw new Error(`Tor fetch failed: HTTP ${torRes.status} ${torRes.statusText}`);
     }
-
-    return torRes;
-  } catch (torErr) {
-    console.log(`[tor] Tor fallback also failed → ${torErr.message}`);
-    throw torErr;
+    const data = await torRes.json();
+    return { ok: true, data };
   }
+
+  if (!torRes.ok) {
+    throw new Error(`Tor fetch failed: HTTP ${torRes.status} ${torRes.statusText}`);
+  }
+
+  return torRes;
 }
 
+/**
+ * Send NEWNYM to Tor control port → forces new circuit (new exit IP).
+ * Gracefully degrades if control port unavailable.
+ */
 /**
  * Read Tor control cookie and return hex-encoded auth string.
  */
@@ -112,10 +98,6 @@ function getTorCookie() {
   }
 }
 
-/**
- * Send NEWNYM to Tor control port → forces new circuit (new exit IP).
- * Gracefully degrades if control port unavailable.
- */
 async function rotateTorCircuit() {
   const controlPort = parseInt(process.env.TOR_CONTROL_PORT || '9051', 10);
   const controlHost = process.env.TOR_CONTROL_HOST || '127.0.0.1';
@@ -126,13 +108,16 @@ async function rotateTorCircuit() {
     socket.setTimeout(5000);
 
     socket.on('connect', () => {
+      // Auth with cookie hex, or try empty password as fallback
       const auth = cookie
         ? `AUTHENTICATE ${cookie}\r\n`
         : 'AUTHENTICATE ""\r\n';
       socket.write(`${auth}SIGNAL NEWNYM\r\nQUIT\r\n`);
     });
-    socket.on('data', () => {});
-    socket.on('error', () => {});
+    socket.on('data', () => {}); // 250 OK — ignore
+    socket.on('error', () => {
+      // Control port not available — skip rotation, still try Tor
+    });
     socket.on('close', () => resolve());
     socket.on('timeout', () => {
       socket.destroy();
