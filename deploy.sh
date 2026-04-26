@@ -70,14 +70,22 @@ echo "✓ Deploy files synced"
 ssh "$SSH_HOST" "
 sudo cp $REMOTE_BASE/deploy/iptv-pb.service /etc/systemd/system/iptv-pb.service
 sudo cp $REMOTE_BASE/deploy/iptv-worker.service /etc/systemd/system/iptv-worker.service
-if [ -f $REMOTE_BASE/deploy/iptv ]; then
-  sudo cp $REMOTE_BASE/deploy/iptv /etc/nginx/sites-available/iptv
-  sudo nginx -t && sudo systemctl reload nginx
-fi
 sudo systemctl daemon-reload
 sudo systemctl enable iptv-pb.service iptv-worker.service
 "
-echo "✓ systemd services and nginx installed"
+
+# 6b. Update nginx config only if SSL cert exists on remote
+if [ -f "$SCRIPT_DIR/deploy/iptv" ]; then
+  SSL_CERT=$(grep ssl_certificate "$SCRIPT_DIR/deploy/iptv" | head -1 | awk '{print $2}' | tr -d ';')
+  if [ -n "$SSL_CERT" ] && ssh "$SSH_HOST" "test -f '$SSL_CERT'" 2>/dev/null; then
+    ssh "$SSH_HOST" "sudo cp $REMOTE_BASE/deploy/iptv /etc/nginx/sites-available/iptv && sudo nginx -t && sudo systemctl reload nginx"
+    echo "✓ nginx reloaded"
+  else
+    echo "  ⊘ SSL cert $SSL_CERT not found on server, skipping nginx update"
+  fi
+fi
+
+echo "✓ systemd services configured"
 
 # 7. Sync migrations
 echo "→ Syncing migrations..."
