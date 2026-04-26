@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/iptv
-ExecStart=/opt/iptv/pocketbase serve --http=127.0.0.1:8090
+ExecStart=/opt/iptv/pocketbase serve --http=0.0.0.0:8090
 Restart=always
 RestartSec=5
 
