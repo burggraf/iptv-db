@@ -1,6 +1,7 @@
-// Cascade delete all sources - let PocketBase foreign keys handle the rest
+// Cascade delete all sources in batches to avoid timeout
 routerAdd('POST', '/api/cascade-delete', (c) => {
   const app = $app;
+  const BATCH_SIZE = 10;
   
   try {
     // Delete sync jobs first (no cascade FK, must delete manually)
@@ -9,16 +10,26 @@ routerAdd('POST', '/api/cascade-delete', (c) => {
       app.delete(job);
     }
     
-    // Delete sources - PocketBase cascades to channels, movies, series, episodes, categories via foreign keys
-    const sources = app.findRecordsByFilter('sources', '1=1');
-    for (const src of sources) {
-      app.delete(src);
+    // Delete sources in batches - PocketBase cascades to channels, movies, series, episodes, categories via foreign keys
+    let totalDeleted = 0;
+    let page = 1;
+    
+    while (true) {
+      const sources = app.findRecordsByFilter('sources', '1=1', { page: page, perPage: BATCH_SIZE });
+      if (sources.length === 0) break;
+      
+      for (const src of sources) {
+        app.delete(src);
+        totalDeleted++;
+      }
+      
+      page++;
     }
     
     return c.json(200, { 
       message: 'All sources and related data deleted successfully',
       deleted: {
-        sources: sources.length,
+        sources: totalDeleted,
         sync_jobs: syncJobs.length
       }
     });
