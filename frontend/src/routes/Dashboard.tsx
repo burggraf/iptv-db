@@ -462,7 +462,7 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell>{s.max_connections ?? '-'}</TableCell>
                       <TableCell>{formatDate(s.expiry_date)}</TableCell>
-                      <TableCell>{s.channel_count ?? '-'}</TableCell>
+                      <TableCell className={s.channels_loaded ? 'font-bold' : ''}>{s.channel_count ?? '-'}</TableCell>
                       <TableCell>{s.movie_count ?? '-'}</TableCell>
                       <TableCell>{s.series_count ?? '-'}</TableCell>
                       <TableCell>{formatDateTime(s.last_sync)}</TableCell>
