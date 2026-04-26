@@ -8,23 +8,46 @@ const TOR_TIMEOUT = parseInt(process.env.TOR_TIMEOUT_MS || '30000', 10);
 const DIRECT_TIMEOUT = parseInt(process.env.DIRECT_TIMEOUT_MS || '15000', 10);
 const BLOCKED_CODES = new Set([403, 429, 503]);
 
+// Network-level errors that commonly indicate IP blocking (not server downtime)
+const BLOCKED_ERRS = new Set(['ECONNRESET', 'ECONNREFUSED']);
+
 const torAgent = new SocksProxyAgent(TOR_SOCKS);
 
 /**
- * Fetch with Tor fallback. Direct first → on HTTP block (403/429/503) → retry via Tor.
+ * Determine if a fetch error looks like an IP block vs a genuine server failure.
+ * IPTV providers often TCP-reset (ECONNRESET) instead of returning HTTP 403.
+ */
+function isLikelyIPBlock(err) {
+  // Direct error code match
+  if (err.code && BLOCKED_ERRS.has(err.code)) return true;
+  // Check nested cause (undici wraps errors)
+  if (err.cause?.code && BLOCKED_ERRS.has(err.cause.code)) return true;
+  // "Failed to fetch" without a clear DNS/timeout reason often means connection-level block
+  const msg = err.message || '';
+  if (msg.includes('fetch') && !msg.includes('ENOTFOUND') && !msg.includes('Timeout') && !msg.includes('timed out')) return true;
+  return false;
+}
+
+/**
+ * Determine if an error is genuinely unrecoverable (server down, DNS dead).
+ * These should NOT trigger Tor fallback.
+ */
+function isUnrecoverable(err) {
+  const msg = err.message || '';
+  const code = err.code || err.cause?.code;
+  if (code === 'ENOTFOUND') return true;
+  if (msg.includes('ENOTFOUND')) return true;
+  if (code === 'ETIMEDOUT' || msg.includes('timed out') || msg.includes('Timeout')) return true;
+  return false;
+}
+
+/**
+ * Fetch with Tor fallback. Direct first → on block → retry via Tor.
  *
- * Network errors (DNS failure, ECONNRESET, timeout) are NOT retried via Tor —
- * Tor cannot fix a domain that doesn't resolve or a server that's down.
+ * Handles both HTTP-level blocks (403/429/503) and network-level blocks
+ * (ECONNRESET, ECONNREFUSED — common for IPTV providers).
  *
- * @param {string} url
- * @param {object} opts - Standard fetch options (headers, method, body, etc.)
- * @param {object} torOpts
- * @param {function} [torOpts.onTorFallback] - Called when Tor kicks in
- * @param {boolean} [torOpts.rotateCircuit=true] - Send NEWNYM before Tor retry
- * @param {number} [torOpts.directTimeout] - Direct fetch timeout ms
- * @param {number} [torOpts.torTimeout] - Tor fetch timeout ms
- * @param {boolean} [torOpts.json] - If true, parse body as JSON and return { ok, data }
- * @returns {Promise<import('node-fetch').Response|{ok:boolean,data:any}>}
+ * Genuine server failures (DNS dead, server offline) are NOT retried.
  */
 export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
   const {
@@ -54,26 +77,31 @@ export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
     return res;
   } catch (err) {
     directErr = err;
-    console.log(`[tor] Direct failed → ${err.message}${isBlocked ? ' (BLOCKED)' : ''}`);
+    const looksBlocked = isLikelyIPBlock(err);
+    const isDead = isUnrecoverable(err);
+
+    if (isDead) {
+      console.log(`[tor] Direct failed → ${err.message} (unrecoverable, not retrying)`);
+      throw directErr;
+    }
+
+    if (looksBlocked) {
+      console.log(`[tor] Direct failed → ${err.message} (likely IP block, trying Tor)`);
+      isBlocked = true;
+    } else {
+      console.log(`[tor] Direct failed → ${err.message} (unknown error, trying Tor)`);
+      isBlocked = true;
+    }
   }
 
-  // ── Only fall back to Tor for HTTP block errors ──
-  // DNS failures, ECONNRESET, timeouts, etc. won't be fixed by Tor
-  if (!isBlocked) {
-    throw directErr;
-  }
-
-  // ── Optional: Rotate Tor circuit before retry ──
+  // ── Attempt 2: Via Tor ──
   if (rotateCircuit) {
     await rotateTorCircuit();
   }
-
-  // ── Notify caller (dashboard phase update) ──
   if (onTorFallback) {
     onTorFallback();
   }
 
-  // ── Attempt 2: Via Tor ──
   try {
     const torRes = await fetch(url, {
       ...opts,
@@ -96,7 +124,8 @@ export async function fetchWithTorFallback(url, opts = {}, torOpts = {}) {
     return torRes;
   } catch (torErr) {
     console.log(`[tor] Tor fallback also failed → ${torErr.message}`);
-    throw torErr;
+    // Throw original error — it's more accurate (Tor exit may also be blocked)
+    throw directErr;
   }
 }
 
