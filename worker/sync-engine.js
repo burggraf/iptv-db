@@ -199,10 +199,10 @@ export class SyncEngine {
 
   /**
    * Update the most recent sync job for a source.
-   * Retries on auto-cancellation errors since PocketBase cancels concurrent requests.
+   * Retries aggressively with backoff to ensure completion updates never fail silently.
    */
   async updateSyncJob(sourceId, updates) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 20; attempt++) {
       try {
         const jobs = await this.pb.collection('sync_jobs').getList(1, 1, {
           filter: `source_id="${sourceId}"`,
@@ -211,16 +211,16 @@ export class SyncEngine {
         if (jobs.items.length > 0) {
           await this.pb.collection('sync_jobs').update(jobs.items[0].id, updates);
         }
-        return; // success
-      } catch (err) {
-        if (err?.isAbort) {
-          if (attempt < 3) {
-            await new Promise(r => setTimeout(r, 200 * attempt));
-            continue;
-          }
-        }
-        console.error('[engine] Failed to update sync job:', err.message);
         return;
+      } catch (err) {
+        const isConflict = err?.isAbort || err?.status === 409 || err?.status === 429;
+        if (isConflict) {
+          const delay = Math.min(300 * attempt, 5000);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        console.error(`[engine] Failed to update sync job (attempt ${attempt}):`, err.message);
+        if (attempt >= 20) throw err;
       }
     }
   }
