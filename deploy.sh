@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Defaults
-SSH_HOST="root@192.168.1.21"
+SSH_HOST="markb@192.168.1.21"
 REMOTE_BASE="/opt/iptv"
 SKIP_BUILD=false
 
@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
         --skip-build) SKIP_BUILD=true; shift ;;
         --help|-h)
             echo "Usage: $0 [--ssh-host HOST] [--skip-build]"
-            echo "  --ssh-host   SSH user@host (default: root@192.168.1.21)"
+            echo "  --ssh-host   SSH user@host (default: markb@192.168.1.21)"
             echo "  --skip-build Skip frontend build, use existing dist/"
             exit 0
             ;;
