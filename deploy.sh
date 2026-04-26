@@ -68,14 +68,14 @@ echo "✓ Deploy files synced"
 
 # 6. Install systemd services if not already installed
 ssh "$SSH_HOST" "
-cp $REMOTE_BASE/deploy/iptv-pb.service /etc/systemd/system/iptv-pb.service
-cp $REMOTE_BASE/deploy/iptv-worker.service /etc/systemd/system/iptv-worker.service
+sudo cp $REMOTE_BASE/deploy/iptv-pb.service /etc/systemd/system/iptv-pb.service
+sudo cp $REMOTE_BASE/deploy/iptv-worker.service /etc/systemd/system/iptv-worker.service
 if [ -f $REMOTE_BASE/deploy/iptv ]; then
-  cp $REMOTE_BASE/deploy/iptv /etc/nginx/sites-available/iptv
-  nginx -t && systemctl reload nginx
+  sudo cp $REMOTE_BASE/deploy/iptv /etc/nginx/sites-available/iptv
+  sudo nginx -t && sudo systemctl reload nginx
 fi
-systemctl daemon-reload
-systemctl enable iptv-pb.service iptv-worker.service
+sudo systemctl daemon-reload
+sudo systemctl enable iptv-pb.service iptv-worker.service
 "
 echo "✓ systemd services and nginx installed"
 
@@ -102,9 +102,9 @@ fi
 
 # 9. Restart services
 ssh "$SSH_HOST" "
-systemctl restart iptv-pb.service
+sudo systemctl restart iptv-pb.service
 sleep 2
-systemctl restart iptv-worker.service
+sudo systemctl restart iptv-worker.service
 sleep 2
 "
 echo "✓ Services restarted"
