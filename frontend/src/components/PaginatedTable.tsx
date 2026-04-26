@@ -38,6 +38,8 @@ interface PaginatedTableProps<T> {
   selectedIds?: Set<string>;
   /** Toggle selection for an ID */
   onToggle?: (id: string) => void;
+  /** Hide the built-in search bar */
+  hideSearch?: boolean;
 }
 
 export default function PaginatedTable<T extends { id: string }>({
@@ -55,6 +57,7 @@ export default function PaginatedTable<T extends { id: string }>({
   selectable = false,
   selectedIds = new Set(),
   onToggle,
+  hideSearch = false,
 }: PaginatedTableProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [page, setPage] = useState(1);
@@ -130,17 +133,19 @@ export default function PaginatedTable<T extends { id: string }>({
   return (
     <div className="space-y-4">
       {/* Search bar */}
-      <div className="flex items-center gap-4">
-        <Input
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-        <span className="text-sm text-muted-foreground">
-          {totalItems.toLocaleString()} record{totalItems !== 1 ? 's' : ''}
-        </span>
-      </div>
+      {!hideSearch && (
+        <div className="flex items-center gap-4">
+          <Input
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+          <span className="text-sm text-muted-foreground">
+            {totalItems.toLocaleString()} record{totalItems !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
 
       {/* Table */}
       <Table>
