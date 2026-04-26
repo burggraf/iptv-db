@@ -515,7 +515,7 @@ export default function SourceDetail() {
       {/* Content counts */}
       <div className="flex flex-wrap gap-6 text-sm">
         <span>
-          <span className="font-semibold">{source.channel_count?.toLocaleString() ?? 0}</span> 
+          <span className="font-semibold">{source.channel_count?.toLocaleString() ?? 0}</span>{" "}
           <span className="text-muted-foreground">Channels</span>
           {source.channels_loaded === false && source.channel_count > 0 && (
             <Badge variant="secondary" className="ml-2 text-xs">Not loaded</Badge>
