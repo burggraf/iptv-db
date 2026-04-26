@@ -526,18 +526,34 @@ export default function SourceDetail() {
         <span><span className="font-semibold">{source.series_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Series</span></span>
       </div>
 
-      {/* Main Tabs: Channels vs Categories */}
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'channels' | 'categories')}>
+      {/* Main Tabs: Categories vs Channels */}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'categories' | 'channels')}>
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="channels">Channels</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="channels">Channels</TabsTrigger>
         </TabsList>
 
         {/* Channels Tab */}
         <TabsContent value="channels">
           <Card className="mt-4">
             <CardHeader>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {!source.channels_loaded && source.channel_count > 0 && (
+                  <button
+                    onClick={handleLoadChannels}
+                    disabled={isLoadingChannels}
+                    className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-primary text-primary-foreground px-3 text-sm ring-offset-background hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isLoadingChannels ? (
+                      <span className="flex items-center gap-1">
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Loading...
+                      </span>
+                    ) : (
+                      <>Load Channels</>
+                    )}
+                  </button>
+                )}
                 <CardTitle>Live Channels</CardTitle>
                 <Select
                   value={selectedLiveCat}
