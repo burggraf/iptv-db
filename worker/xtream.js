@@ -1,19 +1,24 @@
+import { fetchWithTorFallback } from './proxy-fetch.js';
+
 const TIMEOUT_CONNECT = parseInt(process.env.REQUEST_TIMEOUT_MS || '30000', 10);
 const TIMEOUT_READ = parseInt(process.env.READ_TIMEOUT_MS || '60000', 10);
 
 /**
  * Xtream Codes API client.
  * Wraps all API calls with error handling and timeouts.
+ * Automatically falls back to Tor if direct fetch fails.
  */
 export class XtreamClient {
-  constructor(baseUrl, username, password) {
+  constructor(baseUrl, username, password, onTorFallback) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.username = username;
     this.password = password;
+    this.onTorFallback = onTorFallback;
   }
 
   /**
    * Make an API request with timeout and error handling.
+   * Tries direct first. On failure, retries via Tor.
    */
   async request(action, params = {}) {
     const url = new URL(`${this.baseUrl}/player_api.php`);
@@ -26,25 +31,15 @@ export class XtreamClient {
     const connectTimeout = setTimeout(() => controller.abort(), TIMEOUT_CONNECT);
 
     try {
-      const res = await fetch(url.toString(), {
+      const res = await fetchWithTorFallback(url.toString(), {
         signal: controller.signal,
+      }, {
+        onTorFallback: this.onTorFallback,
+        rotateCircuit: false, // Don't rotate mid-session — looks suspicious
+        json: true,
       });
       clearTimeout(connectTimeout);
-
-      // Set read timeout
-      const readTimeout = setTimeout(() => controller.abort(), TIMEOUT_READ);
-
-      try {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        const data = await res.json();
-        clearTimeout(readTimeout);
-        return data;
-      } catch (err) {
-        clearTimeout(readTimeout);
-        throw err;
-      }
+      return res.data;
     } catch (err) {
       clearTimeout(connectTimeout);
       if (err.name === 'AbortError') {
