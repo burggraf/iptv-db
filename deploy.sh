@@ -3,13 +3,13 @@
 # Usage: ./deploy.sh [--ssh-host HOST] [--skip-build]
 #
 # Deploys the frontend to pb_public and syncs deploy files to the server.
-# Default SSH host: root@zzzx.uk
+# Default SSH host: root@192.168.1.21
 # Remote base dir: /opt/iptv
 
 set -euo pipefail
 
 # Defaults
-SSH_HOST="root@zzzx.uk"
+SSH_HOST="root@192.168.1.21"
 REMOTE_BASE="/opt/iptv"
 SKIP_BUILD=false
 
@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
         --skip-build) SKIP_BUILD=true; shift ;;
         --help|-h)
             echo "Usage: $0 [--ssh-host HOST] [--skip-build]"
-            echo "  --ssh-host   SSH user@host (default: root@zzzx.uk)"
+            echo "  --ssh-host   SSH user@host (default: root@192.168.1.21)"
             echo "  --skip-build Skip frontend build, use existing dist/"
             exit 0
             ;;
@@ -117,5 +117,5 @@ ssh "$SSH_HOST" "ls -lh $REMOTE_BASE/pb_public/assets/"
 
 echo ""
 echo "=== Deployment complete ==="
-echo "Frontend: https://zzzx.uk/"
+echo "Frontend: http://192.168.1.21/"
 echo "PocketBase: $(ssh "$SSH_HOST" "curl -s http://127.0.0.1:8090/api/health")"

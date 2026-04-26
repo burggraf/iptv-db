@@ -52,6 +52,14 @@ export default function Dashboard() {
     setMenuOpen(false);
     setChecked(new Set(sources.filter(s => s.status === status).map(s => s.id)));
   };
+  const checkAllByStatus = (status: string) => {
+    setMenuOpen(false);
+    setChecked(prev => {
+      const next = new Set(prev);
+      sources.filter(s => s.status === status).forEach(s => next.add(s.id));
+      return next;
+    });
+  };
 
   // Bulk action menu
   const [menuOpen, setMenuOpen] = useState(false);
@@ -390,6 +398,7 @@ export default function Dashboard() {
                         <Trash2 className="h-4 w-4" /> Delete Selected
                       </button>
                       <div className="my-1 border-t" />
+                      <div className="px-4 py-1.5 text-xs font-medium text-muted-foreground">Select (replace)</div>
                       <button
                         className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
                         onClick={() => selectByStatus('pending')}
@@ -407,6 +416,26 @@ export default function Dashboard() {
                         onClick={() => selectByStatus('active')}
                       >
                         <CheckSquare className="h-4 w-4" /> Select All Active
+                      </button>
+                      <div className="my-1 border-t" />
+                      <div className="px-4 py-1.5 text-xs font-medium text-muted-foreground">Check All (add)</div>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => checkAllByStatus('error')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Error
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => checkAllByStatus('pending')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Pending
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => checkAllByStatus('active')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Active
                       </button>
                     </div>
                   </div>
