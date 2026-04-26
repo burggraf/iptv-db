@@ -1,6 +1,7 @@
 import PocketBase from 'pocketbase';
 import { scrape } from './scraper.js';
 import { SyncEngine } from './sync-engine.js';
+import { loadChannelsOnDemand } from './sync-job.js';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -79,6 +80,8 @@ const server = http.createServer(async (req, res) => {
     await handleSyncAll(req, res);
   } else if (req.method === 'POST' && url.pathname === '/api/cancel-all') {
     await handleCancelAll(req, res);
+  } else if (req.method === 'POST' && url.pathname === '/api/load-channels') {
+    await handleLoadChannels(req, res);
   } else if (req.method === 'GET' && url.pathname === '/api/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -304,6 +307,46 @@ async function handleSyncAll(req, res) {
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'text/plain' });
     res.end(err.message);
+  }
+}
+
+async function handleLoadChannels(req, res) {
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  await new Promise((resolve) => req.on('end', resolve));
+
+  let sourceId;
+  try {
+    const data = JSON.parse(body);
+    sourceId = data.source_id;
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Invalid JSON. Expected: {"source_id": "..."}');
+  }
+
+  if (!sourceId) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Missing "source_id" field');
+  }
+
+  try {
+    const progressUpdates = [];
+    const onProgress = (phase, percent) => {
+      progressUpdates.push({ phase, percent });
+    };
+
+    const channelCount = await loadChannelsOnDemand(pb, sourceId, onProgress);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      success: true, 
+      source_id: sourceId,
+      channel_count: channelCount,
+      progress: progressUpdates
+    }));
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
   }
 }
 

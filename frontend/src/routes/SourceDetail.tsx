@@ -22,6 +22,7 @@ export default function SourceDetail() {
   const [loading, setLoading] = useState(true);
   const [syncJob, setSyncJob] = useState<SyncJob | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState('');
   const navigate = useNavigate();
@@ -179,6 +180,43 @@ export default function SourceDetail() {
     }
   };
 
+  const handleLoadChannels = async () => {
+    if (!id) return;
+    setIsLoadingChannels(true);
+    try {
+      const res = await fetch('/worker/api/load-channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_id: id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to load channels');
+      }
+      
+      // Reload source data to get updated counts and channels_loaded status
+      const src = await pb.collection('sources').getOne<Source>(id);
+      setSource(src);
+      
+      // Reload categories
+      const headers: Record<string, string> = {};
+      if (pb.authStore.token) headers['Authorization'] = pb.authStore.token;
+      const url = `/api/collections/categories/records?page=1&perPage=500&filter=${encodeURIComponent(`source_id="${id}" && type="live"`)}`;
+      const catRes = await fetch(url, { headers });
+      if (catRes.ok) {
+        const data = await catRes.json();
+        setLiveCategories(data.items as Category[]);
+      }
+      
+      alert(`Successfully loaded ${src.channel_count} channels!`);
+    } catch (err) {
+      console.error('Failed to load channels:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsLoadingChannels(false);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -287,12 +325,30 @@ export default function SourceDetail() {
               )}
               <Badge variant="secondary">{source.type}</Badge>
               {!isSyncing && (
-                <button
-                  onClick={handleSync}
-                  className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-background px-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Sync
-                </button>
+                <>
+                  <button
+                    onClick={handleSync}
+                    className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-background px-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Sync
+                  </button>
+                  {!source.channels_loaded && source.channel_count > 0 && (
+                    <button
+                      onClick={handleLoadChannels}
+                      disabled={isLoadingChannels}
+                      className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-primary text-primary-foreground px-2 text-sm ring-offset-background hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {isLoadingChannels ? (
+                        <span className="flex items-center gap-1">
+                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          Loading...
+                        </span>
+                      ) : (
+                        <>Load Channels</>
+                      )}
+                    </button>
+                  )}
+                </>
               )}
               <div className="relative" ref={menuRef}>
                 <button
@@ -409,7 +465,16 @@ export default function SourceDetail() {
 
       {/* Content counts */}
       <div className="flex flex-wrap gap-6 text-sm">
-        <span><span className="font-semibold">{source.channel_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Channels</span></span>
+        <span>
+          <span className="font-semibold">{source.channel_count?.toLocaleString() ?? 0}</span> 
+          <span className="text-muted-foreground">Channels</span>
+          {source.channels_loaded === false && source.channel_count > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">Not loaded</Badge>
+          )}
+          {source.channels_loaded === true && (
+            <Badge variant="success" className="ml-2 text-xs">Loaded</Badge>
+          )}
+        </span>
         <span><span className="font-semibold">{source.movie_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Movies</span></span>
         <span><span className="font-semibold">{source.series_count?.toLocaleString() ?? 0}</span> <span className="text-muted-foreground">Series</span></span>
       </div>

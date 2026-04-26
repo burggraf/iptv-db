@@ -70,20 +70,16 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
     syncCategories(pb, sourceId, 'series', xtream, catMap, onProgress, isCancelled),
   ]);
 
-  // --- Live channels (fully synced) ---
-  onProgress('Fetching live channels...', 15);
+  // --- Counts only (channels loaded on-demand) ---
+  onProgress('Fetching counts...', 40);
   checkCancelled(isCancelled);
-  const channelCount = await syncLiveChannels(pb, sourceId, xtream, catMap, onProgress, isCancelled);
-
-  // --- Movie & series counts only (no per-item cataloging) ---
-  // Fetch both in parallel with a short timeout so one slow server doesn't block the sync.
-  onProgress('Fetching movie and series counts...', 55);
-  checkCancelled(isCancelled);
-  const [movieResult, seriesResult] = await Promise.allSettled([
+  const [channelResult, movieResult, seriesResult] = await Promise.allSettled([
+    timedCount(xtream.getAllLiveStreams.bind(xtream), 15_000, 'channels'),
     timedCount(xtream.getVodStreams.bind(xtream), 15_000, 'VOD'),
     timedCount(xtream.getSeries.bind(xtream), 15_000, 'series'),
   ]);
 
+  const channelCount = channelResult.status === 'fulfilled' ? channelResult.value : 0;
   const movieCount = movieResult.status === 'fulfilled' ? movieResult.value : 0;
   const seriesCount = seriesResult.status === 'fulfilled' ? seriesResult.value : 0;
 
@@ -92,10 +88,48 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
     channel_count: channelCount,
     movie_count: movieCount,
     series_count: seriesCount,
+    channels_loaded: false,
   });
 
   onProgress('Sync complete', 100);
   console.log(`[sync-job] Source ${sourceId} (${source.name}): ${channelCount} channels, ${movieCount} movies, ${seriesCount} series`);
+}
+
+/**
+ * Load channels on-demand for a source that has already been synced.
+ * Fetches categories if needed, then loads all live channels.
+ */
+export async function loadChannelsOnDemand(pb, sourceId, onProgress) {
+  const source = await pb.collection('sources').getOne(sourceId);
+
+  if (!source.base_url || !source.username || !source.password) {
+    throw new Error('Source missing base_url, username, or password');
+  }
+
+  if (source.channels_loaded) {
+    throw new Error('Channels already loaded for this source');
+  }
+
+  const xtream = new XtreamClient(source.base_url, source.username, source.password);
+
+  
+  onProgress('Fetching categories...', 10);
+  const catMap = {};
+  await syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress);
+
+  
+  onProgress('Loading channels...', 30);
+  const channelCount = await syncLiveChannels(pb, sourceId, xtream, catMap, onProgress);
+
+  
+  await pb.collection('sources').update(sourceId, {
+    channel_count: channelCount,
+    channels_loaded: true,
+  });
+
+  onProgress('Channels loaded', 100);
+  console.log(`[sync-job] On-demand load: ${channelCount} channels for source ${sourceId}`);
+  return channelCount;
 }
 
 /**

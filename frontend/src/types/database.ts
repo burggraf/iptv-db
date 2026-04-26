@@ -20,6 +20,7 @@ export interface Source extends RecordModel {
   channel_count: number;
   movie_count: number;
   series_count: number;
+  channels_loaded: boolean;
 }
 
 export interface Category extends RecordModel {
