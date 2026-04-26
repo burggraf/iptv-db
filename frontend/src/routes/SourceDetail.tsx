@@ -57,7 +57,6 @@ export default function SourceDetail() {
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState('');
-  const [channelSearch, setChannelSearch] = useState('');
   const navigate = useNavigate();
 
   const { selectedIds, toggle, clear } = useChannelSelection();
@@ -300,9 +299,8 @@ export default function SourceDetail() {
     if (!id) return;
     const parts = [`source_id="${id}"`, 'available=true'];
     if (selectedLiveCat) parts.push(`category_id="${selectedLiveCat}"`);
-    if (channelSearch) parts.push(`name ~ "${channelSearch}"`);
     setChannelFilter(parts.join(' && '));
-  }, [id, selectedLiveCat, channelSearch]);
+  }, [id, selectedLiveCat]);
 
   useEffect(() => {
     if (!id) return;
@@ -557,23 +555,18 @@ export default function SourceDetail() {
                   </button>
                 )}
                 <CardTitle>Live Channels</CardTitle>
-                <Select
-                  value={selectedLiveCat}
-                  onChange={(e) => setSelectedLiveCat(e.target.value)}
-                  className="w-56"
-                >
-                  <option value="">All Categories</option>
-                  {liveCategories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-                <input
-                  type="text"
-                  placeholder="Search channels..."
-                  value={channelSearch}
-                  onChange={(e) => setChannelSearch(e.target.value)}
-                  className="h-8 w-56 rounded-md border border-input bg-background px-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
+                <div className="flex items-center gap-2 flex-1">
+                  <Select
+                    value={selectedLiveCat}
+                    onChange={(e) => setSelectedLiveCat(e.target.value)}
+                    className="w-56"
+                  >
+                    <option value="">All Categories</option>
+                    {liveCategories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
