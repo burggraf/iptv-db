@@ -537,29 +537,31 @@ export default function SourceDetail() {
         <TabsContent value="channels">
           <Card className="mt-4">
             <CardHeader>
-              <div className="flex flex-wrap items-center gap-3">
-                {!source.channels_loaded && source.channel_count > 0 && (
-                  <button
-                    onClick={handleLoadChannels}
-                    disabled={isLoadingChannels}
-                    className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-primary text-primary-foreground px-3 text-sm ring-offset-background hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isLoadingChannels ? (
-                      <span className="flex items-center gap-1">
-                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        Loading...
-                      </span>
-                    ) : (
-                      <>Load Channels</>
-                    )}
-                  </button>
-                )}
-                <CardTitle>Live Channels</CardTitle>
-                <div className="flex items-center gap-2 flex-1">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {!source.channels_loaded && source.channel_count > 0 && (
+                    <button
+                      onClick={handleLoadChannels}
+                      disabled={isLoadingChannels}
+                      className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-primary text-primary-foreground px-3 text-sm ring-offset-background hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {isLoadingChannels ? (
+                        <span className="flex items-center gap-1">
+                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          Loading...
+                        </span>
+                      ) : (
+                        <>Load Channels</>
+                      )}
+                    </button>
+                  )}
+                  <CardTitle>Live Channels</CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
                   <Select
                     value={selectedLiveCat}
                     onChange={(e) => setSelectedLiveCat(e.target.value)}
-                    className="w-56"
+                    className="w-64"
                   >
                     <option value="">All Categories</option>
                     {liveCategories.map((c) => (
