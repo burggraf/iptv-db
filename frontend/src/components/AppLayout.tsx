@@ -125,17 +125,9 @@ export default function AppLayout() {
     setDeleting(true);
     setDeleteError('');
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (pb.authStore.token) {
-        headers['Authorization'] = pb.authStore.token;
-      }
-      const res = await fetch('/api/cascade-delete', {
-        method: 'POST',
-        headers,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Server error: ${res.status}`);
+      const sources = await pb.collection('sources').getFullList({ batch: 500 });
+      for (const source of sources) {
+        await pb.collection('sources').delete(source.id);
       }
     } catch (err) {
       console.error('Delete all sources failed:', err);
