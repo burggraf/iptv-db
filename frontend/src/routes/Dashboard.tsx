@@ -10,7 +10,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '../components/ui/table';
 import { formatDateTime, formatDate } from '../lib/utils';
-import { ChevronDown, Trash2, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronDown, Trash2, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, CheckSquare } from 'lucide-react';
 
 const PAGE_SIZE = 100;
 const WORKER_BASE = '/worker';
@@ -47,6 +47,10 @@ export default function Dashboard() {
   };
   const toggleAll = () => {
     setChecked(prev => prev.size === sources.length ? new Set() : new Set(sources.map(s => s.id)));
+  };
+  const selectByStatus = (status: string) => {
+    setMenuOpen(false);
+    setChecked(new Set(sources.filter(s => s.status === status).map(s => s.id)));
   };
 
   // Bulk action menu
@@ -384,6 +388,25 @@ export default function Dashboard() {
                         onClick={() => { setMenuOpen(false); setDeleteOpen(true); }}
                       >
                         <Trash2 className="h-4 w-4" /> Delete Selected
+                      </button>
+                      <div className="my-1 border-t" />
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => selectByStatus('pending')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Select All Pending
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => selectByStatus('error')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Select All Error
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => selectByStatus('active')}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Select All Active
                       </button>
                     </div>
                   </div>
