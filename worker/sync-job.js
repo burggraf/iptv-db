@@ -34,12 +34,7 @@ export async function syncSource(pb, sourceId, onProgress, isCancelled) {
     throw new Error('Source missing base_url, username, or password');
   }
 
-  let torFallbackCount = 0;
-  const onTorFallback = () => {
-    torFallbackCount++;
-    onProgress(`🧅 IP blocked — retrying via Tor (attempt ${torFallbackCount})...`);
-  };
-  const xtream = new XtreamClient(source.base_url, source.username, source.password, onTorFallback);
+  const xtream = new XtreamClient(source.base_url, source.username, source.password);
 
   onProgress('Authenticating...', 5);
   let userInfo;
@@ -115,13 +110,9 @@ export async function loadChannelsOnDemand(pb, sourceId, onProgress) {
     throw new Error('Channels already loaded for this source');
   }
 
-  let torFallbackCount = 0;
-  const onTorFallback = () => {
-    torFallbackCount++;
-    onProgress(`🧅 IP blocked — retrying via Tor (attempt ${torFallbackCount})...`);
-  };
-  const xtream = new XtreamClient(source.base_url, source.username, source.password, onTorFallback);
+  const xtream = new XtreamClient(source.base_url, source.username, source.password);
 
+  
   onProgress('Fetching categories...', 10);
   const catMap = {};
   await syncCategories(pb, sourceId, 'live', xtream, catMap, onProgress);

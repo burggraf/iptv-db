@@ -1,16 +1,13 @@
 import * as cheerio from 'cheerio';
 import { randomBytes } from 'crypto';
-import { fetchWithTorFallback } from './proxy-fetch.js';
 
 /**
  * Scrape a blog page for Xtream accounts and M3U links.
  * Returns created/updated source IDs.
  */
 export async function scrape(pb, url) {
-  const res = await fetchWithTorFallback(url, {
+  const res = await fetch(url, {
     signal: AbortSignal.timeout(30000),
-  }, {
-    onTorFallback: () => console.log(`[scraper] 🧅 Tor fallback for ${url}`),
   });
 
   if (!res.ok) {

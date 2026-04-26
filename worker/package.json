@@ -9,10 +9,8 @@
   },
   "dependencies": {
     "cheerio": "^1.1.2",
-    "dotenv": "^16.4.7",
     "node-cron": "^3.0.3",
-    "node-fetch": "^3.3.2",
     "pocketbase": "^0.26.8",
-    "socks-proxy-agent": "^10.0.0"
+    "dotenv": "^16.4.7"
   }
 }
