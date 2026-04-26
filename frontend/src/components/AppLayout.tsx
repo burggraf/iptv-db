@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
-import { Settings, Trash2, Globe, RefreshCw, X, LogOut, ListStart, Square } from 'lucide-react';
+import { Settings, Trash2, Globe, RefreshCw, X, LogOut, ListStart, Square, CheckSquare } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 import type { SyncJob } from '../types/database';
 
@@ -216,6 +216,35 @@ export default function AppLayout() {
                         disabled={cancellingAll}
                       >
                         <Square className="h-4 w-4" /> {cancellingAll ? 'Cancelling...' : 'Cancel All Syncs'}
+                      </button>
+                      <div className="my-1 border-t" />
+                      <div className="px-4 py-1.5 text-xs font-medium text-muted-foreground">Check All (add to selection)</div>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          window.dispatchEvent(new CustomEvent('check-all-status', { detail: 'error' }));
+                        }}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Error
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          window.dispatchEvent(new CustomEvent('check-all-status', { detail: 'pending' }));
+                        }}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Pending
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-muted transition-colors"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          window.dispatchEvent(new CustomEvent('check-all-status', { detail: 'active' }));
+                        }}
+                      >
+                        <CheckSquare className="h-4 w-4" /> Check All Active
                       </button>
                       <div className="my-1 border-t" />
                       <button

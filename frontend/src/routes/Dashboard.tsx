@@ -61,6 +61,15 @@ export default function Dashboard() {
     });
   };
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const status = (e as CustomEvent<string>).detail;
+      checkAllByStatus(status);
+    };
+    window.addEventListener('check-all-status', handler);
+    return () => window.removeEventListener('check-all-status', handler);
+  }, [sources]);
+
   // Bulk action menu
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
