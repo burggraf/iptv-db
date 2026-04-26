@@ -1,5 +1,8 @@
 import { fetchWithTorFallback } from './proxy-fetch.js';
 
+// Realistic browser User-Agent — many IPTV servers block default Node.js/undici UAs
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 const TIMEOUT_CONNECT = parseInt(process.env.REQUEST_TIMEOUT_MS || '30000', 10);
 const TIMEOUT_READ = parseInt(process.env.READ_TIMEOUT_MS || '60000', 10);
 
@@ -33,6 +36,7 @@ export class XtreamClient {
     try {
       const res = await fetchWithTorFallback(url.toString(), {
         signal: controller.signal,
+        headers: { 'User-Agent': USER_AGENT },
       }, {
         onTorFallback: this.onTorFallback,
         rotateCircuit: false, // Don't rotate mid-session — looks suspicious
